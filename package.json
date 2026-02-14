@@ -1,0 +1,23 @@
+{
+  "name": "rio-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DoD RIO Risk, Issue, and Opportunity Management Tool",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "db:generate": "cd server && npx prisma generate",
+    "db:migrate": "cd server && npx prisma migrate dev",
+    "db:push": "cd server && npx prisma db push",
+    "db:seed": "cd server && npx prisma db seed",
+    "db:studio": "cd server && npx prisma studio",
+    "db:update-mitigation-dates": "cd server && npx tsx scripts/update-mitigation-dates.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

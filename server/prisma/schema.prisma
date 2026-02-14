@@ -1,0 +1,136 @@
+// DoD RIO Management Tool - Database Schema
+// Legal Entity → Organizational Units (Program/Project/Department) → RIOs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgUnitType {
+  program
+  project
+  department
+}
+
+enum RiskStatus {
+  open
+  mitigating
+  accepted
+  closed
+}
+
+enum MitigationStrategy {
+  acceptance
+  avoidance
+  transfer
+  control
+  burn_down
+}
+
+enum RiskCategory {
+  technical
+  schedule
+  cost
+  other
+}
+
+model LegalEntity {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizationalUnits OrganizationalUnit[]
+}
+
+model OrganizationalUnit {
+  id             String      @id @default(uuid())
+  legalEntityId  String
+  type           OrgUnitType
+  name           String
+  code           String
+  description    String?
+  parentId       String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  legalEntity   LegalEntity       @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  parent        OrganizationalUnit? @relation("OrgUnitHierarchy", fields: [parentId], references: [id])
+  children      OrganizationalUnit[] @relation("OrgUnitHierarchy")
+  risks         Risk[]
+  // issues        Issue[]
+  // opportunities Opportunity[]
+
+  @@unique([legalEntityId, type, code])
+}
+
+model Risk {
+  id                    String            @id @default(uuid())
+  organizationalUnitId  String
+  riskName              String            // Human-readable label for lists, tooltips, reference
+  riskCondition         String            // Context and root cause (DoD 2.2.3)
+  riskIf                String            // The risk event that, if it occurs, has unwanted effects
+  riskThen              String            // Consequences that will impact the program
+  category              RiskCategory?     // Technical, Schedule, Cost, Other
+  originalLikelihood    Int               // Immutable: set at creation, never changed. If wrong, delete and recreate.
+  originalConsequence   Int               // Immutable: set at creation, never changed. If wrong, delete and recreate.
+  likelihood            Int               // 1-5: Current (editable with change reason)
+  consequence           Int               // 1-5: Current (editable with change reason)
+  riskLevel             String?           // Low, Moderate, High (computed)
+  mitigationStrategy    MitigationStrategy?
+  mitigationPlan        String?
+  owner                 String?
+  status                RiskStatus        @default(open)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  organizationalUnit OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
+  versions             RiskVersion[]
+  mitigationSteps      MitigationStep[]
+}
+
+// Structured mitigation steps per risk (replaces free-form mitigation plan for tracking)
+// Users enter L and C; RL (1-25) is derived and stored for waterfall plotting
+model MitigationStep {
+  id                      String    @id @default(uuid())
+  riskId                  String
+  sequenceOrder           Int       // 1, 2, 3...
+  mitigationActions       String    // Clearly stated actions to reduce risk
+  closureCriteria         String    // Criteria for closing this step
+  estimatedStartDate      DateTime?
+  estimatedEndDate        DateTime?
+  expectedLikelihood      Int       // 1-5 planned posture when step done
+  expectedConsequence     Int       // 1-5 planned posture when step done
+  expectedRiskLevel       Int       // Derived 1-25 from L,C, stored for waterfall
+  actualLikelihood        Int?      // 1-5 actual posture when step completed
+  actualConsequence       Int?      // 1-5 actual posture when step completed
+  actualRiskLevel         Int?      // Derived 1-25 from L,C, stored for waterfall
+  actualCompletedAt       DateTime? // When step was actually completed
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  risk Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@index([riskId])
+}
+
+// Full snapshot of risk at each change - enables version control and time-travel
+model RiskVersion {
+  id                      String   @id @default(uuid())
+  riskId                  String
+  version                 Int      // 1 = create, 2+ = updates
+  snapshot                Json     // Full risk state: { riskName, riskCondition, riskIf, riskThen, category, likelihood, consequence, riskLevel, ... }
+  likelihoodChangeReason  String?  // Required when likelihood changes
+  consequenceChangeReason String?  // Required when consequence changes
+  createdAt               DateTime @default(now())
+
+  risk Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@index([riskId, createdAt])
+}
