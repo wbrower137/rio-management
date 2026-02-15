@@ -66,6 +66,22 @@ async function main() {
     },
   });
 
+  // Opportunity categories: Growth, Partnership, Efficiency, Cost, Customer
+  const oppCatData = [
+    { code: "growth", label: "Growth", sortOrder: 0 },
+    { code: "partnership", label: "Partnership", sortOrder: 1 },
+    { code: "efficiency", label: "Efficiency", sortOrder: 2 },
+    { code: "cost", label: "Cost", sortOrder: 3 },
+    { code: "customer", label: "Customer", sortOrder: 4 },
+  ];
+  for (const c of oppCatData) {
+    await prisma.opportunityCategory.upsert({
+      where: { code: c.code },
+      update: {},
+      create: c,
+    });
+  }
+
   const deptEng = await prisma.organizationalUnit.upsert({
     where: {
       legalEntityId_type_code: {
@@ -121,6 +137,12 @@ async function main() {
       description: "Company B operations department",
     },
   });
+
+  const riskCount = await prisma.risk.count();
+  if (riskCount > 0) {
+    console.log("DB already has risks. Skipping seed to avoid duplicates.");
+    return;
+  }
 
   // Use a future base date so mitigation steps are all in the future (for testing close-out flows)
   const today = new Date();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Category } from "../types";
+import type { OpportunityCategory } from "../types";
 
 const API = "/api";
 
@@ -23,27 +23,27 @@ const btnDanger = { ...btnPrimary, background: "#dc2626" };
 const btnSecondary = { ...btnPrimary, background: "#6b7280" };
 
 interface BlockedDeleteState {
-  category: Category;
-  risks: { id: string; riskName: string; organizationalUnitId: string }[];
+  category: OpportunityCategory;
+  opportunities: { id: string; opportunityName: string; organizationalUnitId: string }[];
 }
 
-export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
-  const [categories, setCategories] = useState<Category[]>([]);
+export function OpportunityCategoryManager({ onUpdate }: { onUpdate?: () => void }) {
+  const [categories, setCategories] = useState<OpportunityCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editing, setEditing] = useState<Category | null>(null);
+  const [editing, setEditing] = useState<OpportunityCategory | null>(null);
   const [blockedDelete, setBlockedDelete] = useState<BlockedDeleteState | null>(null);
-  const [reassignTo, setReassignTo] = useState<string>(""); // "" = clear (null)
+  const [reassignTo, setReassignTo] = useState<string>("");
   const [reassigning, setReassigning] = useState(false);
   const [addForm, setAddForm] = useState({ label: "" });
   const [editForm, setEditForm] = useState({ label: "" });
 
   const load = () => {
     setLoading(true);
-    fetch(`${API}/categories`)
+    fetch(`${API}/opportunity-categories`)
       .then((r) => r.json())
       .then(setCategories)
-      .catch((e) => console.error("Failed to load categories:", e))
+      .catch((e) => console.error("Failed to load opportunity categories:", e))
       .finally(() => setLoading(false));
   };
 
@@ -57,10 +57,10 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
       return;
     }
     if (categories.some((c) => c.label.trim().toLowerCase() === labelStr.toLowerCase())) {
-      alert("A category with this label already exists.");
+      alert("An opportunity category with this label already exists.");
       return;
     }
-    fetch(`${API}/categories`, {
+    fetch(`${API}/opportunity-categories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: labelStr }),
@@ -84,7 +84,7 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
-    fetch(`${API}/categories/${editing.id}`, {
+    fetch(`${API}/opportunity-categories/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: editForm.label.trim() }),
@@ -101,12 +101,12 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
       })
       .catch((e) => {
         console.error(e);
-        alert(e.message || "Failed to update category");
+        alert(e.message || "Failed to update opportunity category");
       });
   };
 
-  const handleDelete = (cat: Category) => {
-    fetch(`${API}/categories/${cat.id}`, { method: "DELETE" })
+  const handleDelete = (cat: OpportunityCategory) => {
+    fetch(`${API}/opportunity-categories/${cat.id}`, { method: "DELETE" })
       .then((res) => {
         if (res.status === 204) {
           load();
@@ -114,9 +114,9 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
           return;
         }
         if (res.status === 400) {
-          return res.json().then((body: { risks?: BlockedDeleteState["risks"] }) => {
-            if (body.risks && body.risks.length > 0) {
-              setBlockedDelete({ category: cat, risks: body.risks });
+          return res.json().then((body: { opportunities?: BlockedDeleteState["opportunities"] }) => {
+            if (body.opportunities && body.opportunities.length > 0) {
+              setBlockedDelete({ category: cat, opportunities: body.opportunities });
             }
           });
         }
@@ -135,8 +135,8 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
     const value = reassignTo === "" ? null : reassignTo;
     const catToDelete = blockedDelete.category;
     Promise.all(
-      blockedDelete.risks.map((r) =>
-        fetch(`${API}/risks/${r.id}`, {
+      blockedDelete.opportunities.map((o) =>
+        fetch(`${API}/opportunities/${o.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ category: value }),
@@ -146,12 +146,12 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
       .then((results) => {
         const failed = results.filter((r) => !r.ok);
         if (failed.length > 0) {
-          alert(`Failed to update ${failed.length} risk(s).`);
+          alert(`Failed to update ${failed.length} opportunity(ies).`);
           return;
         }
         setBlockedDelete(null);
         setReassignTo("");
-        return fetch(`${API}/categories/${catToDelete.id}`, { method: "DELETE" });
+        return fetch(`${API}/opportunity-categories/${catToDelete.id}`, { method: "DELETE" });
       })
       .then((delRes) => {
         if (delRes?.status === 204) {
@@ -174,7 +174,7 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
   return (
     <section style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", overflow: "hidden" }}>
       <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Risk Categories</h3>
+        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Opportunity Categories</h3>
         {!showAddForm && (
           <button type="button" onClick={() => setShowAddForm(true)} style={btnPrimary}>
             Add category
@@ -185,12 +185,12 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
       {showAddForm && (
         <form onSubmit={handleAdd} style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #e5e7eb", display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "flex-end" }}>
           <div style={{ minWidth: 160 }}>
-            <label style={labelStyle}>Label (e.g. Technical)</label>
+            <label style={labelStyle}>Label (e.g. Growth)</label>
             <input
               type="text"
               value={addForm.label}
               onChange={(e) => setAddForm((p) => ({ ...p, label: e.target.value }))}
-              placeholder="Technical"
+              placeholder="Growth"
               style={formInputStyle}
             />
           </div>
@@ -200,7 +200,7 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
       )}
 
       {loading ? (
-        <p style={{ padding: "1rem", color: "#6b7280" }}>Loading categories...</p>
+        <p style={{ padding: "1rem", color: "#6b7280" }}>Loading opportunity categories...</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
@@ -257,11 +257,11 @@ export function CategoryManager({ onUpdate }: { onUpdate?: () => void }) {
           <div style={{ background: "white", borderRadius: 8, padding: "1.5rem", maxWidth: 520, width: "90%", maxHeight: "80vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
             <h4 style={{ margin: "0 0 0.5rem" }}>Cannot delete &quot;{blockedDelete.category.label}&quot;</h4>
             <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "#6b7280" }}>
-              The following {blockedDelete.risks.length} risk(s) use this category. Reassign or clear their category first.
+              The following {blockedDelete.opportunities.length} opportunity(ies) use this category. Reassign or clear their category first.
             </p>
             <ul style={{ margin: "0 0 1rem", paddingLeft: "1.25rem", fontSize: "0.875rem", maxHeight: 200, overflow: "auto" }}>
-              {blockedDelete.risks.map((r) => (
-                <li key={r.id} style={{ marginBottom: "0.25rem" }}>{r.riskName || r.id}</li>
+              {blockedDelete.opportunities.map((o) => (
+                <li key={o.id} style={{ marginBottom: "0.25rem" }}>{o.opportunityName || o.id}</li>
               ))}
             </ul>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>

@@ -42,6 +42,24 @@ model Category {
   @@map("Category")
 }
 
+model OpportunityCategory {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  label     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("OpportunityCategory")
+}
+
+enum OpportunityStatus {
+  pursue_now
+  defer
+  reevaluate
+  reject
+}
+
 model LegalEntity {
   id          String   @id @default(uuid())
   name        String
@@ -68,10 +86,99 @@ model OrganizationalUnit {
   parent        OrganizationalUnit? @relation("OrgUnitHierarchy", fields: [parentId], references: [id])
   children      OrganizationalUnit[] @relation("OrgUnitHierarchy")
   risks         Risk[]
-  // issues        Issue[]
-  // opportunities Opportunity[]
+  opportunities Opportunity[]
 
   @@unique([legalEntityId, type, code])
+}
+
+model Opportunity {
+  id                    String            @id @default(uuid())
+  organizationalUnitId  String
+  opportunityName       String
+  opportunityCondition  String
+  opportunityIf         String
+  opportunityThen       String
+  category              String?           // OpportunityCategory.code
+  originalLikelihood    Int               // Immutable at creation
+  originalImpact        Int               // Immutable at creation (1-5)
+  likelihood            Int               // 1-5 current
+  impact                Int               // 1-5 current (Very Low to Very High)
+  opportunityLevel      String?           // Low, Moderate, High (1-25 mapping)
+  owner                 String?
+  status                OpportunityStatus @default(pursue_now)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  organizationalUnit    OrganizationalUnit     @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
+  versions              OpportunityVersion[]
+  actionPlanSteps       OpportunityActionPlanStep[]
+  auditLogs             OpportunityAuditLog[]
+
+  @@index([organizationalUnitId])
+}
+
+model OpportunityVersion {
+  id                      String   @id @default(uuid())
+  opportunityId           String
+  version                 Int
+  snapshot                Json
+  likelihoodChangeReason  String?
+  impactChangeReason      String?
+  statusChangeRationale   String?
+  createdAt               DateTime @default(now())
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId, createdAt])
+}
+
+model OpportunityActionPlanStep {
+  id                      String    @id @default(uuid())
+  opportunityId           String
+  sequenceOrder           Int
+  plannedAction           String
+  estimatedStartDate      DateTime?
+  estimatedEndDate        DateTime?
+  expectedLikelihood      Int
+  expectedImpact          Int
+  expectedOpportunityLevel Int
+  actualLikelihood        Int?
+  actualImpact            Int?
+  actualOpportunityLevel  Int?
+  actualCompletedAt       DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  versions    OpportunityActionPlanStepVersion[]
+
+  @@index([opportunityId])
+}
+
+model OpportunityActionPlanStepVersion {
+  id               String   @id @default(uuid())
+  stepId           String
+  version          Int
+  snapshot         Json
+  createdAt        DateTime @default(now())
+
+  step OpportunityActionPlanStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@index([stepId, createdAt])
+}
+
+model OpportunityAuditLog {
+  id           String   @id @default(uuid())
+  opportunityId String
+  entityType   String   // "opportunity" | "action_plan_step"
+  entityId     String
+  action       String
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId, createdAt])
 }
 
 model Risk {

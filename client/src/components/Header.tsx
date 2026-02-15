@@ -35,7 +35,7 @@ export function Header({ view, onViewChange }: HeaderProps) {
         </div>
         <nav style={{ display: "flex", gap: "0.5rem" }}>
           <button style={linkStyle(view === "risks")} onClick={() => onViewChange("risks")}>
-            Risks
+            Risks, Opp., & Issues
           </button>
           <button style={linkStyle(view === "settings")} onClick={() => onViewChange("settings")}>
             Settings

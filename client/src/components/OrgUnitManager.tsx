@@ -43,7 +43,6 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
   const [form, setForm] = useState({
     type: "program" as "program" | "project" | "department",
     name: "",
-    code: "",
     description: "",
   });
 
@@ -83,15 +82,14 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
       body: JSON.stringify({
         legalEntityId: selectedEntity.id,
         type: form.type,
-        name: form.name,
-        code: form.code,
-        description: form.description || null,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
       }),
     })
       .then((r) => r.json())
       .then(() => {
         setShowAddForm(false);
-        setForm({ type: "program", name: "", code: "", description: "" });
+        setForm({ type: "program", name: "", description: "" });
         loadOrgUnits();
         onUpdate?.();
       })
@@ -104,12 +102,16 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
     fetch(`${API}/organizational-units/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        type: form.type,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+      }),
     })
       .then((r) => r.json())
       .then(() => {
         setEditing(null);
-        setForm({ type: "program", name: "", code: "", description: "" });
+        setForm({ type: "program", name: "", description: "" });
         loadOrgUnits();
         onUpdate?.();
       })
@@ -129,12 +131,12 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
 
   const startEdit = (u: OrganizationalUnit) => {
     setEditing(u);
-    setForm({ type: u.type, name: u.name, code: u.code, description: u.description ?? "" });
+    setForm({ type: u.type, name: u.name, description: u.description ?? "" });
   };
 
   const cancelEdit = () => {
     setEditing(null);
-    setForm({ type: "program", name: "", code: "", description: "" });
+    setForm({ type: "program", name: "", description: "" });
   };
 
   return (
@@ -147,7 +149,7 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
             onChange={(e) => setSelectedEntity(legalEntities.find((l) => l.id === e.target.value) ?? null)}
             style={{ padding: "0.5rem 2rem 0.5rem 0.75rem", borderRadius: 6, border: "1px solid #d1d5db" }}
           >
-            <option value="">— Select Legal Entity —</option>
+            <option value="">— Select Entity —</option>
             {legalEntities.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
@@ -163,7 +165,7 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
       </div>
 
       {!selectedEntity && (
-        <p style={{ padding: "2rem", color: "#6b7280" }}>Select a Legal Entity to manage its Programs, Projects, and Departments.</p>
+        <p style={{ padding: "2rem", color: "#6b7280" }}>Select an Entity to manage its Programs, Projects, and Departments.</p>
       )}
 
       {selectedEntity && showAddForm && (
@@ -196,16 +198,6 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
                 placeholder="e.g. Program Alpha"
               />
             </div>
-            <div>
-              <label style={labelStyle}>Code *</label>
-              <input
-                value={form.code}
-                onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
-                required
-                style={formInputStyle}
-                placeholder="e.g. PROG-ALPHA"
-              />
-            </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelStyle}>Description</label>
               <textarea
@@ -232,9 +224,8 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Type</th>
                 <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Name</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Code</th>
+                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Type</th>
                 <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Description</th>
                 <th style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.75rem", color: "#6b7280" }}>Actions</th>
               </tr>
@@ -243,7 +234,7 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
               {orgUnits.map((u) =>
                 editing?.id === u.id ? (
                   <tr key={u.id} style={{ borderBottom: "1px solid #f3f4f6", background: "#fffbeb" }}>
-                    <td colSpan={5} style={{ padding: "1rem" }}>
+                    <td colSpan={4} style={{ padding: "1rem" }}>
                       <form onSubmit={handleEdit} style={{ display: "grid", gap: "1rem", maxWidth: 500 }}>
                         <h4 style={{ margin: "0 0 0.5rem" }}>Edit {typeLabel[u.type]}</h4>
                         <div>
@@ -268,15 +259,6 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
                           />
                         </div>
                         <div>
-                          <label style={labelStyle}>Code *</label>
-                          <input
-                            value={form.code}
-                            onChange={(ev) => setForm((p) => ({ ...p, code: ev.target.value }))}
-                            required
-                            style={formInputStyle}
-                          />
-                        </div>
-                        <div>
                           <label style={labelStyle}>Description</label>
                           <textarea
                             value={form.description}
@@ -294,18 +276,18 @@ export function OrgUnitManager({ legalEntities, onUpdate }: OrgUnitManagerProps)
                   </tr>
                 ) : (
                   <tr key={u.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{typeLabel[u.type]}</td>
-                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{u.name}</td>
-                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{u.code}</td>
-                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{u.description ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>
                       <button
                         type="button"
                         onClick={() => startEdit(u)}
-                        style={{ ...btnSecondary, padding: "0.25rem 0.5rem", marginRight: "0.5rem" }}
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "#2563eb", textDecoration: "underline", fontSize: "inherit" }}
                       >
-                        Edit
+                        {u.name}
                       </button>
+                    </td>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{typeLabel[u.type]}</td>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{u.description ?? "—"}</td>
+                    <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
                       <button
                         type="button"
                         onClick={() => setDeleting(u)}

@@ -27,7 +27,7 @@ export function OrgUnitSelector({
     <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
       <div>
         <label style={{ display: "block", fontSize: "0.75rem", color: "#6b7280", marginBottom: "0.25rem" }}>
-          Legal Entity
+          Entity
         </label>
         <select
           value={selectedLegalEntity?.id ?? ""}

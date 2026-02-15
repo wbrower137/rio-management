@@ -30,14 +30,22 @@ legalEntityRoutes.get("/:id", async (req, res) => {
   }
 });
 
+function slugFromName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "") || "entity";
+}
+
 legalEntityRoutes.post("/", async (req, res) => {
   try {
-    const { name, code, description } = req.body;
-    if (!name || !code) {
-      return res.status(400).json({ error: "Name and code are required" });
-    }
+    const { name, description } = req.body;
+    const nameStr = typeof name === "string" && name.trim() ? name.trim() : "";
+    if (!nameStr) return res.status(400).json({ error: "Name is required" });
+    const code = slugFromName(nameStr);
     const entity = await prisma.legalEntity.create({
-      data: { name, code, description: description ?? null },
+      data: { name: nameStr, code, description: typeof description === "string" ? description.trim() || null : null },
     });
     res.status(201).json(entity);
   } catch (err) {
@@ -48,10 +56,19 @@ legalEntityRoutes.post("/", async (req, res) => {
 
 legalEntityRoutes.patch("/:id", async (req, res) => {
   try {
-    const { name, code, description } = req.body;
+    const { name, description } = req.body;
+    const data: { name?: string; code?: string; description?: string | null } = {};
+    if (typeof name === "string" && name.trim()) {
+      data.name = name.trim();
+      data.code = slugFromName(name);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "description")) {
+      data.description = typeof req.body.description === "string" && req.body.description.trim() ? req.body.description.trim() : null;
+    }
+    if (Object.keys(data).length === 0) return res.status(400).json({ error: "No fields to update" });
     const entity = await prisma.legalEntity.update({
       where: { id: req.params.id },
-      data: { name, code, description },
+      data,
     });
     res.json(entity);
   } catch (err) {

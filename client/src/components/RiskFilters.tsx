@@ -20,7 +20,6 @@ interface RiskFiltersProps {
 
 const checkboxStyle = { margin: 0, cursor: "pointer" as const };
 const labelStyle = { fontSize: "0.8rem", cursor: "pointer" as const, marginRight: "0.75rem" };
-const groupStyle = { display: "flex", flexWrap: "wrap" as const, alignItems: "center", gap: "0.25rem 0.5rem" };
 
 export function RiskFilters({ categories, filters, onChange }: RiskFiltersProps) {
   const categoryOptions = categories.map((c) => ({ value: c.code as RiskCategory, label: c.label }));
@@ -40,21 +39,23 @@ export function RiskFilters({ categories, filters, onChange }: RiskFiltersProps)
 
   const clearAll = () => onChange({ categories: new Set(), statuses: new Set() });
 
+  const rowStyle = { display: "flex", alignItems: "center", flexWrap: "wrap" as const, gap: "0.25rem 0.5rem" };
+  const labelStyleInner = { fontSize: "0.75rem", color: "#374151", marginRight: "0.5rem", fontWeight: 700, minWidth: 60 };
+
   return (
     <div
       style={{
         display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: "1rem 1.5rem",
+        flexDirection: "column",
+        gap: "0.5rem",
         padding: "0.75rem 1rem",
         background: "#f9fafb",
         borderRadius: 8,
         border: "1px solid #e5e7eb",
       }}
     >
-      <div style={groupStyle}>
-        <span style={{ fontSize: "0.75rem", color: "#374151", marginRight: "0.5rem", fontWeight: 700 }}>Category:</span>
+      <div style={rowStyle}>
+        <span style={labelStyleInner}>Category:</span>
         {categoryOptions.map((c) => (
           <label key={c.value} style={labelStyle}>
             <input type="checkbox" checked={filters.categories.has(c.value)} onChange={() => toggleCategory(c.value)} style={checkboxStyle} />
@@ -62,24 +63,24 @@ export function RiskFilters({ categories, filters, onChange }: RiskFiltersProps)
           </label>
         ))}
       </div>
-      <div style={groupStyle}>
-        <span style={{ fontSize: "0.75rem", color: "#374151", marginRight: "0.5rem", fontWeight: 700 }}>Status:</span>
+      <div style={rowStyle}>
+        <span style={labelStyleInner}>Status:</span>
         {STATUSES.map((s) => (
           <label key={s.value} style={labelStyle}>
             <input type="checkbox" checked={filters.statuses.has(s.value)} onChange={() => toggleStatus(s.value)} style={checkboxStyle} />
             {" "}{s.label}
           </label>
         ))}
+        {(filters.categories.size > 0 || filters.statuses.size > 0) && (
+          <button
+            type="button"
+            onClick={clearAll}
+            style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "0.25rem 0.5rem", border: "1px solid #d1d5db", background: "white", borderRadius: 4, cursor: "pointer", color: "#6b7280" }}
+          >
+            Clear filters
+          </button>
+        )}
       </div>
-      {(filters.categories.size > 0 || filters.statuses.size > 0) && (
-        <button
-          type="button"
-          onClick={clearAll}
-          style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", border: "1px solid #d1d5db", background: "white", borderRadius: 4, cursor: "pointer", color: "#6b7280" }}
-        >
-          Clear filters
-        </button>
-      )}
     </div>
   );
 }

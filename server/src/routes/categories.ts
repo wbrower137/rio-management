@@ -15,20 +15,33 @@ categoryRoutes.get("/", async (_req, res) => {
   }
 });
 
+function slugFromLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "") || "category";
+}
+
 categoryRoutes.post("/", async (req, res) => {
   try {
-    const { code, label, sortOrder } = req.body;
-    if (!code || typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({ error: "code is required" });
+    const { label, sortOrder } = req.body;
+    const labelStr = typeof label === "string" && label.trim() ? label.trim() : "";
+    if (!labelStr) return res.status(400).json({ error: "Label is required" });
+
+    const all = await prisma.category.findMany({ select: { label: true } });
+    if (all.some((c) => c.label.trim().toLowerCase() === labelStr.toLowerCase())) {
+      return res.status(400).json({ error: "A category with this label already exists" });
     }
-    const cleanCode = code.trim().toLowerCase().replace(/\s+/g, "_");
-    const existing = await prisma.category.findUnique({ where: { code: cleanCode } });
-    if (existing) return res.status(400).json({ error: "A category with this code already exists" });
+
+    const cleanCode = slugFromLabel(labelStr);
+    const existingByCode = await prisma.category.findUnique({ where: { code: cleanCode } });
+    if (existingByCode) return res.status(400).json({ error: "A category with this label already exists" });
 
     const category = await prisma.category.create({
       data: {
         code: cleanCode,
-        label: (typeof label === "string" && label.trim()) ? label.trim() : cleanCode,
+        label: labelStr,
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
       },
     });
@@ -46,7 +59,14 @@ categoryRoutes.patch("/:id", async (req, res) => {
     if (!existing) return res.status(404).json({ error: "Category not found" });
 
     const data: { label?: string; sortOrder?: number } = {};
-    if (typeof label === "string" && label.trim()) data.label = label.trim();
+    if (typeof label === "string" && label.trim()) {
+      const labelStr = label.trim();
+      const all = await prisma.category.findMany({ where: { id: { not: req.params.id } }, select: { label: true } });
+      if (all.some((c) => c.label.trim().toLowerCase() === labelStr.toLowerCase())) {
+        return res.status(400).json({ error: "A category with this label already exists" });
+      }
+      data.label = labelStr;
+    }
     if (typeof sortOrder === "number") data.sortOrder = sortOrder;
 
     const category = await prisma.category.update({

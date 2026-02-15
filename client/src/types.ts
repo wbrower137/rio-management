@@ -71,3 +71,53 @@ export interface MitigationStep {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface OpportunityCategory {
+  id: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OpportunityStatus = "pursue_now" | "defer" | "reevaluate" | "reject";
+
+export interface Opportunity {
+  id: string;
+  organizationalUnitId: string;
+  opportunityName: string;
+  opportunityCondition: string;
+  opportunityIf: string;
+  opportunityThen: string;
+  category: string | null;
+  originalLikelihood?: number;
+  originalImpact?: number;
+  likelihood: number;
+  impact: number;
+  opportunityLevel: string | null;
+  owner: string | null;
+  status: OpportunityStatus;
+  statusChangeRationale?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastUpdated?: string;
+}
+
+export interface OpportunityActionPlanStep {
+  id: string;
+  opportunityId: string;
+  sequenceOrder: number;
+  plannedAction: string;
+  estimatedStartDate: string | null;
+  estimatedEndDate: string | null;
+  expectedLikelihood: number;
+  expectedImpact: number;
+  expectedOpportunityLevel: number;
+  actualLikelihood: number | null;
+  actualImpact: number | null;
+  actualOpportunityLevel: number | null;
+  actualCompletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -28,7 +28,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editing, setEditing] = useState<LegalEntity | null>(null);
   const [deleting, setDeleting] = useState<LegalEntity | null>(null);
-  const [form, setForm] = useState({ name: "", code: "", description: "" });
+  const [form, setForm] = useState({ name: "", description: "" });
 
   const load = () => {
     setLoading(true);
@@ -46,12 +46,12 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
     fetch(`${API}/legal-entities`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ name: form.name.trim(), description: form.description.trim() || null }),
     })
       .then((r) => r.json())
       .then(() => {
         setShowAddForm(false);
-        setForm({ name: "", code: "", description: "" });
+        setForm({ name: "", description: "" });
         load();
         onUpdate?.();
       })
@@ -64,12 +64,12 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
     fetch(`${API}/legal-entities/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ name: form.name.trim(), description: form.description.trim() || null }),
     })
       .then((r) => r.json())
       .then(() => {
         setEditing(null);
-        setForm({ name: "", code: "", description: "" });
+        setForm({ name: "", description: "" });
         load();
         onUpdate?.();
       })
@@ -87,22 +87,22 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
       .catch((e) => console.error("Failed to delete legal entity:", e));
   };
 
-  const startEdit = (e: LegalEntity) => {
-    setEditing(e);
-    setForm({ name: e.name, code: e.code, description: e.description ?? "" });
+  const startEdit = (entity: LegalEntity) => {
+    setEditing(entity);
+    setForm({ name: entity.name, description: entity.description ?? "" });
   };
 
   const cancelEdit = () => {
     setEditing(null);
-    setForm({ name: "", code: "", description: "" });
+    setForm({ name: "", description: "" });
   };
 
   return (
     <section style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", overflow: "hidden" }}>
       <div style={{ padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb" }}>
-        <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}>Legal Entities</h2>
+        <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}>Entities</h2>
         <button style={btnPrimary} onClick={() => setShowAddForm(!showAddForm)}>
-          {showAddForm ? "Cancel" : "+ Add Legal Entity"}
+          {showAddForm ? "Cancel" : "+ Add Entity"}
         </button>
       </div>
 
@@ -111,7 +111,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
           onSubmit={handleAdd}
           style={{ padding: "1.5rem", borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}
         >
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>New Legal Entity</h3>
+          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>New Entity</h3>
           <div style={{ display: "grid", gap: "1rem", maxWidth: 400 }}>
             <div>
               <label style={labelStyle}>Name *</label>
@@ -121,16 +121,6 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
                 required
                 style={formInputStyle}
                 placeholder="e.g. Company A"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Code *</label>
-              <input
-                value={form.code}
-                onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
-                required
-                style={formInputStyle}
-                placeholder="e.g. COMPANY-A"
               />
             </div>
             <div>
@@ -151,13 +141,12 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
       {loading ? (
         <p style={{ padding: "2rem", color: "#6b7280" }}>Loading...</p>
       ) : entities.length === 0 ? (
-        <p style={{ padding: "2rem", color: "#6b7280" }}>No legal entities yet. Add one above.</p>
+        <p style={{ padding: "2rem", color: "#6b7280" }}>No entities yet. Add one above.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
               <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Name</th>
-              <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Code</th>
               <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Description</th>
               <th style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.75rem", color: "#6b7280" }}>Actions</th>
             </tr>
@@ -166,23 +155,14 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
             {entities.map((e) =>
               editing?.id === e.id ? (
                 <tr key={e.id} style={{ borderBottom: "1px solid #f3f4f6", background: "#fffbeb" }}>
-                  <td colSpan={4} style={{ padding: "1rem" }}>
+                  <td colSpan={3} style={{ padding: "1rem" }}>
                     <form onSubmit={handleEdit} style={{ display: "grid", gap: "1rem", maxWidth: 500 }}>
-                      <h4 style={{ margin: "0 0 0.5rem" }}>Edit Legal Entity</h4>
+                      <h4 style={{ margin: "0 0 0.5rem" }}>Edit Entity</h4>
                       <div>
                         <label style={labelStyle}>Name *</label>
                         <input
                           value={form.name}
                           onChange={(ev) => setForm((p) => ({ ...p, name: ev.target.value }))}
-                          required
-                          style={formInputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Code *</label>
-                        <input
-                          value={form.code}
-                          onChange={(ev) => setForm((p) => ({ ...p, code: ev.target.value }))}
                           required
                           style={formInputStyle}
                         />
@@ -205,17 +185,17 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
                 </tr>
               ) : (
                 <tr key={e.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{e.name}</td>
-                  <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{e.code}</td>
-                  <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{e.description ?? "—"}</td>
-                  <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>
                     <button
                       type="button"
                       onClick={() => startEdit(e)}
-                      style={{ ...btnSecondary, padding: "0.25rem 0.5rem", marginRight: "0.5rem" }}
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "#2563eb", textDecoration: "underline", fontSize: "inherit" }}
                     >
-                      Edit
+                      {e.name}
                     </button>
+                  </td>
+                  <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{e.description ?? "—"}</td>
+                  <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
                     <button
                       type="button"
                       onClick={() => setDeleting(e)}
@@ -254,7 +234,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
             }}
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h3 style={{ margin: "0 0 0.5rem" }}>Delete Legal Entity?</h3>
+            <h3 style={{ margin: "0 0 0.5rem" }}>Delete Entity?</h3>
             <p style={{ margin: "0 0 1rem", color: "#6b7280", fontSize: "0.875rem" }}>
               This will permanently delete <strong>{deleting.name}</strong> and all its Programs, Projects, Departments, and their Risks. This cannot be undone.
             </p>
