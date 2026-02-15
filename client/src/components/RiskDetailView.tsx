@@ -1,17 +1,10 @@
 import { useState, useEffect } from "react";
-import type { MitigationStep, OrganizationalUnit, Risk, RiskCategory } from "../types";
+import type { Category, MitigationStep, OrganizationalUnit, Risk, RiskCategory } from "../types";
 import { MitigationStepsEditor } from "./MitigationStepsEditor";
 import { RiskMitigationMatrix } from "./RiskMitigationMatrix";
 import { RiskWaterfall } from "./RiskWaterfall";
 
 const API = "/api";
-
-const CATEGORIES: { value: RiskCategory; label: string }[] = [
-  { value: "technical", label: "Technical" },
-  { value: "schedule", label: "Schedule" },
-  { value: "cost", label: "Cost" },
-  { value: "other", label: "Other" },
-];
 
 const STRATEGY_LABELS: Record<string, string> = {
   acceptance: "Acceptance",
@@ -34,9 +27,73 @@ const levelColor: Record<string, string> = {
   high: "#ef4444",
 };
 
-type DetailTab = "overview" | "mitigation" | "waterfall" | "history";
+type DetailTab = "overview" | "mitigation" | "waterfall" | "audit";
+
+interface AuditChange {
+  from: unknown;
+  to: unknown;
+}
+
+interface AuditLogEntry {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  details?: {
+    changedFields?: string[];
+    stepNumber?: number;
+    changes?: Record<string, AuditChange>;
+    likelihoodChangeReason?: string;
+    consequenceChangeReason?: string;
+    statusChangeRationale?: string;
+  };
+  createdAt: string;
+}
+
+function formatAuditValue(key: string, value: unknown, categoryLabels: Map<string, string>): string {
+  if (value === undefined || value === null) return "—";
+  if (key === "category") return categoryLabels.get(String(value)) ?? String(value);
+  if (key === "status") return STATUS_LABELS[value as string] ?? String(value);
+  if (key === "mitigationStrategy") return STRATEGY_LABELS[value as string] ?? String(value);
+  if (
+    key === "estimatedStartDate" ||
+    key === "estimatedEndDate" ||
+    key === "actualCompletedAt"
+  ) {
+    const s = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    return s;
+  }
+  return String(value);
+}
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  riskName: "Name",
+  riskCondition: "Condition",
+  riskIf: "If",
+  riskThen: "Then",
+  category: "Category",
+  likelihood: "Likelihood",
+  consequence: "Consequence",
+  mitigationStrategy: "Mitigation strategy",
+  mitigationPlan: "Mitigation plan",
+  owner: "Owner",
+  status: "Status",
+  sequenceOrder: "Sequence",
+  mitigationActions: "Mitigation actions",
+  closureCriteria: "Closure criteria",
+  estimatedStartDate: "Est. start date",
+  estimatedEndDate: "Est. end date",
+  expectedLikelihood: "Expected L",
+  expectedConsequence: "Expected C",
+  actualLikelihood: "Actual L",
+  actualConsequence: "Actual C",
+  actualCompletedAt: "Completed",
+  mitigationStepsReordered: "Mitigation steps reordered",
+};
 
 interface RiskDetailViewProps {
+  categories: Category[];
   risk: Risk;
   orgUnit: OrganizationalUnit;
   onBack: () => void;
@@ -48,56 +105,17 @@ const labelStyle = { display: "block" as const, fontSize: "0.75rem", marginBotto
 const btnPrimary = { padding: "0.5rem 1rem", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer" as const };
 const btnSecondary = { ...btnPrimary, background: "#6b7280" };
 
-interface VersionEntry {
-  version: number;
-  snapshot: { riskName?: string; riskCondition?: string; riskIf?: string; riskThen?: string; category?: string; likelihood?: number; consequence?: number; riskLevel?: string; status?: string; owner?: string; mitigationStrategy?: string };
-  createdAt: string;
-}
-
-const HISTORY_FIELDS: { key: keyof VersionEntry["snapshot"]; label: string }[] = [
-  { key: "riskName", label: "Name" },
-  { key: "riskCondition", label: "Condition" },
-  { key: "riskIf", label: "If" },
-  { key: "riskThen", label: "Then" },
-  { key: "likelihood", label: "Current L" },
-  { key: "consequence", label: "Current C" },
-  { key: "category", label: "Category" },
-  { key: "status", label: "Status" },
-  { key: "owner", label: "Owner" },
-];
-
-function formatHistoryValue(key: string, value: unknown): string {
-  if (value === undefined || value === null) return "—";
-  if (key === "category") return CATEGORIES.find((c) => c.value === value)?.label ?? String(value);
-  if (key === "status") return STATUS_LABELS[value as string] ?? String(value);
-  return String(value);
-}
-
-function getVersionChanges(
-  current: VersionEntry["snapshot"],
-  previous: VersionEntry["snapshot"] | undefined
-): { label: string; from: string; to: string }[] {
-  if (!previous) return [];
-  const changes: { label: string; from: string; to: string }[] = [];
-  for (const { key, label } of HISTORY_FIELDS) {
-    const curr = current[key];
-    const prev = previous[key];
-    const currStr = formatHistoryValue(key, curr);
-    const prevStr = formatHistoryValue(key, prev);
-    if (currStr !== prevStr) {
-      changes.push({ label, from: prevStr, to: currStr });
-    }
-  }
-  return changes;
-}
-
-export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailViewProps) {
+export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: RiskDetailViewProps) {
+  const categoryLabels = new Map(categories.map((c) => [c.code, c.label]));
+  const categoryOptions = categories.map((c) => ({ value: c.code as RiskCategory, label: c.label }));
   const [tab, setTab] = useState<DetailTab>("overview");
   const [editing, setEditing] = useState(false);
   const [showOriginalLxC, setShowOriginalLxC] = useState(false);
   const [hasMitigationSteps, setHasMitigationSteps] = useState<boolean | null>(null);
   const [mitigationSteps, setMitigationSteps] = useState<MitigationStep[] | null>(null);
-  const [history, setHistory] = useState<VersionEntry[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const [auditLogError, setAuditLogError] = useState<string | null>(null);
 
   const loadMitigationSteps = () => {
     fetch(`${API}/risks/${risk.id}/mitigation-steps`)
@@ -106,17 +124,29 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
       .catch(() => setHasMitigationSteps(false));
   };
 
+  const loadAuditLog = () => {
+    setAuditLogError(null);
+    setAuditLogLoading(true);
+    fetch(`${API}/risks/${risk.id}/audit-log`)
+      .then((r) => {
+        if (!r.ok) throw new Error(r.status === 404 ? "Risk not found" : `Failed to load audit log (${r.status})`);
+        return r.json();
+      })
+      .then((data: unknown) => setAuditLog(Array.isArray(data) ? (data as AuditLogEntry[]) : []))
+      .catch((err) => {
+        console.error("Audit log fetch failed:", err);
+        setAuditLogError(err instanceof Error ? err.message : "Failed to load audit log");
+        setAuditLog([]);
+      })
+      .finally(() => setAuditLogLoading(false));
+  };
+
   useEffect(() => {
     loadMitigationSteps();
   }, [risk.id]);
 
   useEffect(() => {
-    if (tab === "history") {
-      fetch(`${API}/risks/${risk.id}/history`)
-        .then((r) => r.json())
-        .then((data: VersionEntry[]) => setHistory(Array.isArray(data) ? data.reverse() : []))
-        .catch(() => setHistory([]));
-    }
+    if (tab === "audit") loadAuditLog();
   }, [risk.id, tab]);
   const [editForm, setEditForm] = useState({
     riskName: "",
@@ -131,6 +161,7 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
     mitigationStrategy: "",
     owner: "",
     status: "",
+    statusChangeRationale: "",
   });
 
   const startEdit = () => {
@@ -148,6 +179,7 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
       mitigationStrategy: risk.mitigationStrategy ?? "",
       owner: risk.owner ?? "",
       status: risk.status,
+      statusChangeRationale: "",
     });
   };
 
@@ -157,12 +189,11 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
     e.preventDefault();
     const lChanged = editForm.likelihood !== risk.likelihood;
     const cChanged = editForm.consequence !== risk.consequence;
-    if (lChanged && !editForm.likelihoodChangeReason.trim()) {
-      return; // validation shown in form
-    }
-    if (cChanged && !editForm.consequenceChangeReason.trim()) {
-      return;
-    }
+    const statusChangingToClosedOrAccepted =
+      (editForm.status === "closed" || editForm.status === "accepted") && editForm.status !== risk.status;
+    if (lChanged && !editForm.likelihoodChangeReason.trim()) return;
+    if (cChanged && !editForm.consequenceChangeReason.trim()) return;
+    if (statusChangingToClosedOrAccepted && !editForm.statusChangeRationale.trim()) return;
     fetch(`${API}/risks/${risk.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -179,11 +210,13 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
         mitigationStrategy: editForm.mitigationStrategy || null,
         owner: editForm.owner || null,
         status: editForm.status,
+        statusChangeRationale: statusChangingToClosedOrAccepted ? editForm.statusChangeRationale : undefined,
       }),
     })
       .then(() => {
         setEditing(false);
         onUpdate();
+        loadAuditLog();
       })
       .catch((e) => console.error("Failed to update risk:", e));
   };
@@ -193,7 +226,7 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
     { id: "overview", label: "Overview" },
     { id: "mitigation", label: "Mitigation Steps" },
     { id: "waterfall", label: "Waterfall", disabled: waterfallDisabled },
-    { id: "history", label: "History" },
+    { id: "audit", label: "Audit Log" },
   ];
 
   return (
@@ -250,23 +283,6 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1rem" }}>
                 <div>
-                  <label style={labelStyle}>Category</label>
-                  <select value={editForm.category} onChange={(e) => setEditForm((p) => ({ ...p, category: e.target.value as RiskCategory }))} style={formInputStyle}>
-                    <option value="">—</option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Likelihood (1-5) — current</label>
-                  <input type="number" min={1} max={5} value={editForm.likelihood} onChange={(e) => setEditForm((p) => ({ ...p, likelihood: parseInt(e.target.value) || 1 }))} style={formInputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Consequence (1-5) — current</label>
-                  <input type="number" min={1} max={5} value={editForm.consequence} onChange={(e) => setEditForm((p) => ({ ...p, consequence: parseInt(e.target.value) || 1 }))} style={formInputStyle} />
-                </div>
-                <div>
                   <label style={labelStyle}>Status</label>
                   <select value={editForm.status} onChange={(e) => setEditForm((p) => ({ ...p, status: e.target.value }))} style={formInputStyle}>
                     <option value="open">Open</option>
@@ -274,6 +290,36 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
                     <option value="accepted">Accepted</option>
                     <option value="closed">Closed</option>
                   </select>
+                </div>
+                {((editForm.status === "closed" || editForm.status === "accepted") && editForm.status !== risk.status) && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>Rationale for status change *</label>
+                    <textarea
+                      value={editForm.statusChangeRationale}
+                      onChange={(e) => setEditForm((p) => ({ ...p, statusChangeRationale: e.target.value }))}
+                      required
+                      rows={2}
+                      style={formInputStyle}
+                      placeholder="Why is this risk being closed or accepted?"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select value={editForm.category} onChange={(e) => setEditForm((p) => ({ ...p, category: e.target.value as RiskCategory }))} style={formInputStyle}>
+                    <option value="">—</option>
+                    {categoryOptions.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Likelihood (1-5)</label>
+                  <input type="number" min={1} max={5} value={editForm.likelihood} onChange={(e) => setEditForm((p) => ({ ...p, likelihood: parseInt(e.target.value) || 1 }))} style={formInputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Consequence (1-5)</label>
+                  <input type="number" min={1} max={5} value={editForm.consequence} onChange={(e) => setEditForm((p) => ({ ...p, consequence: parseInt(e.target.value) || 1 }))} style={formInputStyle} />
                 </div>
               </div>
               {(editForm.likelihood !== risk.likelihood || editForm.consequence !== risk.consequence) && (
@@ -317,88 +363,116 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
             </form>
           ) : (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-                <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Risk Statement</h3>
-                <button type="button" onClick={startEdit} style={{ ...btnPrimary, padding: "0.4rem 0.75rem", fontSize: "0.8rem" }}>Edit</button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                <h3 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 600, borderBottom: "2px solid #e5e7eb", paddingBottom: "0.35rem" }}>Risk Statement</h3>
+                <button type="button" onClick={startEdit} style={{ ...btnPrimary, padding: "0.4rem 0.75rem", fontSize: "0.8rem", flexShrink: 0, marginLeft: "1rem" }}>Edit</button>
               </div>
-              <dl style={{ display: "grid", gap: "0.75rem 2rem", gridTemplateColumns: "auto 1fr", margin: 0, fontSize: "0.9rem" }}>
+              <dl style={{ display: "grid", gap: "0.5rem 1.5rem", gridTemplateColumns: "auto 1fr", margin: "0 0 1.25rem", fontSize: "0.9rem" }}>
                 <dt style={{ color: "#6b7280", fontWeight: 600, minWidth: 90 }}>Condition</dt>
-                <dd style={{ margin: 0 }}>{risk.riskCondition ?? "—"}</dd>
+                <dd style={{ margin: 0, fontWeight: 500 }}>{risk.riskCondition ?? "—"}</dd>
                 <dt style={{ color: "#6b7280", fontWeight: 600 }}>If</dt>
-                <dd style={{ margin: 0 }}>{risk.riskIf ?? "—"}</dd>
+                <dd style={{ margin: 0, fontWeight: 500 }}>{risk.riskIf ?? "—"}</dd>
                 <dt style={{ color: "#6b7280", fontWeight: 600 }}>Then</dt>
-                <dd style={{ margin: 0 }}>{risk.riskThen ?? "—"}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Category</dt>
-                <dd style={{ margin: 0 }}>{risk.category ? (CATEGORIES.find((c) => c.value === risk.category)?.label ?? risk.category) : "—"}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Original</dt>
-                <dd style={{ margin: 0 }}>
-                  L{risk.originalLikelihood ?? risk.likelihood}×C{risk.originalConsequence ?? risk.consequence}
-                  <span style={{ fontSize: "0.7rem", color: "#6b7280", marginLeft: "0.5rem", display: "block", marginTop: "0.2rem" }}>Immutable (tied to creation). If wrong, delete and recreate the risk.</span>
-                </dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Current</dt>
-                <dd style={{ margin: 0 }}>L{risk.likelihood}×C{risk.consequence}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Last updated</dt>
-                <dd style={{ margin: 0 }}>{new Date(risk.updatedAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Risk Level</dt>
-                <dd style={{ margin: 0 }}>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "0.2rem 0.5rem",
-                      borderRadius: 4,
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      background: levelColor[risk.riskLevel ?? "moderate"] + "22",
-                      color: levelColor[risk.riskLevel ?? "moderate"],
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {risk.riskLevel ?? "moderate"}
-                  </span>
-                </dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Status</dt>
-                <dd style={{ margin: 0 }}>{STATUS_LABELS[risk.status] ?? risk.status}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Owner</dt>
-                <dd style={{ margin: 0 }}>{risk.owner ?? "—"}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Mitigation Strategy</dt>
-                <dd style={{ margin: 0 }}>{risk.mitigationStrategy ? (STRATEGY_LABELS[risk.mitigationStrategy] ?? risk.mitigationStrategy) : "—"}</dd>
-                <dt style={{ color: "#6b7280", fontWeight: 600 }}>Mitigation Plan</dt>
-                <dd style={{ margin: 0 }}>
-                  {hasMitigationSteps === null ? "…" : (
-                    <button type="button" onClick={() => setTab("mitigation")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "#2563eb", textDecoration: "underline" }}>
-                      {hasMitigationSteps ? "Yes" : "No"}
-                    </button>
-                  )}
-                </dd>
+                <dd style={{ margin: 0, fontWeight: 500 }}>{risk.riskThen ?? "—"}</dd>
               </dl>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0 2rem", alignItems: "start" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.0625rem", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb", paddingBottom: "0.35rem" }}>Status</h3>
+                  <dl style={{ display: "grid", gap: "0.35rem 1rem", gridTemplateColumns: "auto 1fr", margin: 0, fontSize: "0.875rem" }}>
+                    <dt style={{ color: "#6b7280", fontWeight: 600, minWidth: 82 }}>Status</dt>
+                    <dd style={{ margin: 0 }}>
+                      <span
+                        title={
+                          (risk.status === "closed" || risk.status === "accepted") && risk.statusChangeRationale
+                            ? risk.statusChangeRationale
+                            : undefined
+                        }
+                        style={{
+                          cursor: (risk.status === "closed" || risk.status === "accepted") && risk.statusChangeRationale ? "help" : undefined,
+                        }}
+                      >
+                        {STATUS_LABELS[risk.status] ?? risk.status}
+                      </span>
+                    </dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Owner</dt>
+                    <dd style={{ margin: 0 }}>{risk.owner ?? "—"}</dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Last Updated</dt>
+                    <dd style={{ margin: 0 }}>{new Date(risk.lastUpdated ?? risk.updatedAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Category</dt>
+                    <dd style={{ margin: 0 }}>{risk.category ? (categoryLabels.get(risk.category) ?? risk.category) : "—"}</dd>
+                  </dl>
+                </div>
+                <div>
+                  <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.0625rem", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb", paddingBottom: "0.35rem" }}>Risk Level</h3>
+                  <dl style={{ display: "grid", gap: "0.35rem 1rem", gridTemplateColumns: "auto 1fr", margin: 0, fontSize: "0.875rem" }}>
+                    <dt style={{ color: "#6b7280", fontWeight: 600, minWidth: 82 }}>Current</dt>
+                    <dd style={{ margin: 0 }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "0.2rem 0.5rem",
+                          borderRadius: 4,
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          background: levelColor[risk.riskLevel ?? "moderate"] + "22",
+                          color: levelColor[risk.riskLevel ?? "moderate"],
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {risk.riskLevel ?? "moderate"}
+                      </span>
+                    </dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Original L×C</dt>
+                    <dd style={{ margin: 0 }}>
+                      <span title="Immutable (tied to creation). If wrong, delete and recreate the risk." style={{ cursor: "help" }}>
+                        L{risk.originalLikelihood ?? risk.likelihood}×C{risk.originalConsequence ?? risk.consequence}
+                      </span>
+                    </dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Current L×C</dt>
+                    <dd style={{ margin: 0 }}>L{risk.likelihood}×C{risk.consequence}</dd>
+                  </dl>
+                </div>
+                <div>
+                  <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.0625rem", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb", paddingBottom: "0.35rem" }}>Mitigation</h3>
+                  <dl style={{ display: "grid", gap: "0.35rem 1rem", gridTemplateColumns: "auto 1fr", margin: 0, fontSize: "0.875rem" }}>
+                    <dt style={{ color: "#6b7280", fontWeight: 600, minWidth: 82 }}>Strategy</dt>
+                    <dd style={{ margin: 0 }}>{risk.mitigationStrategy ? (STRATEGY_LABELS[risk.mitigationStrategy] ?? risk.mitigationStrategy) : "—"}</dd>
+                    <dt style={{ color: "#6b7280", fontWeight: 600 }}>Plan</dt>
+                    <dd style={{ margin: 0 }}>
+                      {hasMitigationSteps === null ? "…" : (
+                        <button type="button" onClick={() => setTab("mitigation")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "#2563eb", textDecoration: "underline" }}>
+                          {hasMitigationSteps ? "Yes" : "No"}
+                        </button>
+                      )}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
             </>
           )}
         </div>
       )}
 
       {tab === "mitigation" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "#6b7280", cursor: "pointer" }}>
-              <input type="checkbox" checked={showOriginalLxC} onChange={(e) => setShowOriginalLxC(e.target.checked)} />
-              Show original L×C
-            </label>
-            <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>Applies to matrix and steps</span>
-          </div>
-          <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div style={{ flexShrink: 0, minWidth: 380 }}>
-              <RiskMitigationMatrix risk={risk} steps={mitigationSteps} showOriginalLxC={showOriginalLxC} />
+        <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flexShrink: 0, minWidth: 380, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <RiskMitigationMatrix
+                risk={risk}
+                steps={mitigationSteps}
+                showOriginalLxC={showOriginalLxC}
+                onShowOriginalLxCChange={setShowOriginalLxC}
+              />
             </div>
             <div style={{ flex: 1, minWidth: 320, background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
               <MitigationStepsEditor
                 riskId={risk.id}
                 risk={{ originalLikelihood: risk.originalLikelihood ?? risk.likelihood, originalConsequence: risk.originalConsequence ?? risk.consequence, likelihood: risk.likelihood, consequence: risk.consequence }}
                 showOriginalLxC={showOriginalLxC}
-                onUpdate={() => { onUpdate(); loadMitigationSteps(); }}
+                onUpdate={() => { onUpdate(); loadMitigationSteps(); loadAuditLog(); }}
                 onStepsChange={(steps) => setMitigationSteps(steps)}
               />
             </div>
-          </div>
         </div>
       )}
 
@@ -406,35 +480,98 @@ export function RiskDetailView({ risk, orgUnit, onBack, onUpdate }: RiskDetailVi
         <RiskWaterfall orgUnit={orgUnit} risks={[risk]} preselectedRiskId={risk.id} />
       )}
 
-      {tab === "history" && (
+      {tab === "audit" && (
         <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1.5rem" }}>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>Version History</h3>
-          {history.length === 0 ? (
-            <p style={{ color: "#6b7280", margin: 0 }}>No version history yet.</p>
+          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>Audit Log</h3>
+          <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "#6b7280" }}>
+            Every creation, update, and deletion of this risk and its mitigation steps.
+          </p>
+          {auditLogError ? (
+            <p style={{ color: "#dc2626", margin: 0 }}>{auditLogError}</p>
+          ) : auditLogLoading ? (
+            <p style={{ color: "#6b7280", margin: 0 }}>Loading audit log…</p>
+          ) : auditLog.length === 0 ? (
+            <p style={{ color: "#6b7280", margin: 0 }}>No audit entries yet.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {history.map((v, i) => {
-                const previous = history[i + 1];
-                const changes = getVersionChanges(v.snapshot ?? {}, previous?.snapshot);
-                const isCreation = v.version === 1;
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {auditLog.map((entry) => {
+                const entityLabel = entry.entityType === "risk" ? "Risk" : `Mitigation step ${entry.details?.stepNumber ?? "—"}`;
+                const actionLabel = entry.action === "created" ? "Created" : entry.action === "updated" ? "Updated" : "Deleted";
+                const changes = entry.details?.changes;
                 return (
-                  <div key={v.version} style={{ borderBottom: i < history.length - 1 ? "1px solid #e5e7eb" : undefined, paddingBottom: i < history.length - 1 ? "1rem" : 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                      <strong style={{ fontSize: "0.9rem" }}>Version {v.version}</strong>
-                      <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>{new Date(v.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                  <div
+                    key={entry.id}
+                    style={{
+                      padding: "0.75rem 1rem",
+                      background: "#f9fafb",
+                      borderRadius: 6,
+                      borderLeft: "3px solid #6b7280",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom:
+                          (changes && Object.keys(changes).length > 0) ||
+                          entry.details?.likelihoodChangeReason ||
+                          entry.details?.consequenceChangeReason ||
+                          entry.details?.statusChangeRationale
+                            ? "0.5rem"
+                            : 0,
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>
+                        {entityLabel} — {actionLabel}
+                      </span>
+                      <span style={{ color: "#6b7280", fontSize: "0.8rem" }}>
+                        {new Date(entry.createdAt).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
                     </div>
-                    {isCreation ? (
-                      <p style={{ margin: 0, fontSize: "0.875rem", color: "#6b7280" }}>Risk created.</p>
-                    ) : changes.length === 0 ? (
-                      <p style={{ margin: 0, fontSize: "0.875rem", color: "#6b7280" }}>No tracked fields changed.</p>
-                    ) : (
-                      <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.875rem" }}>
-                        {changes.map((c) => (
-                          <li key={c.label} style={{ marginBottom: "0.25rem" }}>
-                            <strong>{c.label}:</strong> {c.from} → {c.to}
-                          </li>
-                        ))}
-                      </ul>
+                    {entry.action === "updated" && (
+                      <>
+                        {changes && Object.keys(changes).length > 0 && (
+                          <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "#374151", fontSize: "0.8125rem" }}>
+                            {Object.entries(changes).map(([fieldKey, { from, to }]) => {
+                              const label = AUDIT_FIELD_LABELS[fieldKey] ?? fieldKey;
+                              const fromStr = formatAuditValue(fieldKey, from, categoryLabels);
+                              const toStr = formatAuditValue(fieldKey, to, categoryLabels);
+                              return (
+                                <li key={fieldKey} style={{ marginBottom: "0.25rem" }}>
+                                  <strong>{label}:</strong> {fromStr} → {toStr}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                        {(entry.details?.likelihoodChangeReason ?? entry.details?.consequenceChangeReason ?? entry.details?.statusChangeRationale) && (
+                          <div style={{ marginTop: changes && Object.keys(changes).length > 0 ? "0.5rem" : 0, fontSize: "0.8125rem", color: "#374151" }}>
+                            {entry.details.likelihoodChangeReason && (
+                              <p style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                                <strong>Likelihood change reason:</strong> {entry.details.likelihoodChangeReason}
+                              </p>
+                            )}
+                            {entry.details.consequenceChangeReason && (
+                              <p style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                                <strong>Consequence change reason:</strong> {entry.details.consequenceChangeReason}
+                              </p>
+                            )}
+                            {entry.details.statusChangeRationale && (
+                              <p style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                                <strong>Status change rationale:</strong> {entry.details.statusChangeRationale}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 );

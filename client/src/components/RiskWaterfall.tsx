@@ -44,7 +44,7 @@ interface WaterfallPoint {
   actualIsOriginal?: boolean;
 }
 
-export function RiskWaterfall({ orgUnit, risks, preselectedRiskId }: RiskWaterfallProps) {
+export function RiskWaterfall({ orgUnit: _orgUnit, risks, preselectedRiskId }: RiskWaterfallProps) {
   const [selectedRiskId, setSelectedRiskId] = useState<string>(preselectedRiskId ?? "");
   const [data, setData] = useState<WaterfallPoint[]>([]);
   const [loading, setLoading] = useState(false);

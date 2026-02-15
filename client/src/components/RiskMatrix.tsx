@@ -1,9 +1,8 @@
 import { useState } from "react";
-import type { OrganizationalUnit, Risk } from "../types";
-
-const API = "/api";
+import type { Category, OrganizationalUnit, Risk } from "../types";
 
 interface RiskMatrixProps {
+  categories: Category[];
   orgUnit: OrganizationalUnit;
   risks: Risk[];
   onSelectRisk?: (riskId: string) => void;
@@ -46,15 +45,92 @@ function getNumericalRL(likelihood: number, consequence: number): number {
   return NUMERICAL_RL[key] ?? 13;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  technical: "Technical",
-  schedule: "Schedule",
-  cost: "Cost",
-  other: "Other",
+// Numerical RL (1-25) → low / moderate / high for table cell color (same as matrix cells)
+const RL_LEVEL: Record<number, keyof typeof MATRIX_COLOR> = {};
+const LEVEL_BY_CELL: Record<string, keyof typeof MATRIX_COLOR> = {
+  "1-1": "low", "1-2": "low", "1-3": "low", "1-4": "moderate", "1-5": "moderate",
+  "2-1": "low", "2-2": "low", "2-3": "moderate", "2-4": "moderate", "2-5": "high",
+  "3-1": "low", "3-2": "moderate", "3-3": "moderate", "3-4": "high", "3-5": "high",
+  "4-1": "moderate", "4-2": "moderate", "4-3": "high", "4-4": "high", "4-5": "high",
+  "5-1": "moderate", "5-2": "high", "5-3": "high", "5-4": "high", "5-5": "high",
 };
+(Object.entries(NUMERICAL_RL) as [string, number][]).forEach(([key, rl]) => {
+  RL_LEVEL[rl] = LEVEL_BY_CELL[key] ?? "moderate";
+});
 
-export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
+function getRLColor(rl: number): string {
+  return MATRIX_COLOR[RL_LEVEL[rl] ?? "moderate"];
+}
+
+const OFFSET_X = 12;
+const OFFSET_Y = 8;
+
+type CellOccupant = { type: "current"; risk: Risk } | { type: "original"; risk: Risk };
+
+function getPositionInCell(
+  cellL: number,
+  cellC: number,
+  index: number,
+  total: number,
+  cellSize: number,
+  padding: { top: number; left: number },
+  labelWidth: number,
+  labelHeight: number
+): { x: number; y: number } {
+  const cellX = padding.left + labelWidth + (cellC - 1) * cellSize;
+  const cellY = padding.top + labelHeight + (5 - cellL) * cellSize;
+  const x = cellX + cellSize / 2 + (total > 1 ? (index - (total - 1) / 2) * OFFSET_X : 0);
+  const y = cellY + cellSize / 2 + (total > 1 ? (index - (total - 1) / 2) * OFFSET_Y : 0);
+  return { x, y };
+}
+
+function getCurrentCirclePosition(
+  r: Risk,
+  cellOccupants: Map<string, CellOccupant[]>,
+  cellSize: number,
+  padding: { top: number; left: number },
+  labelWidth: number,
+  labelHeight: number
+): { x: number; y: number } {
+  const key = `${r.likelihood}-${r.consequence}`;
+  const list = cellOccupants.get(key) ?? [];
+  const idx = list.findIndex((x) => x.type === "current" && x.risk.id === r.id);
+  if (idx < 0) return getPositionInCell(r.likelihood, r.consequence, 0, 1, cellSize, padding, labelWidth, labelHeight);
+  return getPositionInCell(r.likelihood, r.consequence, idx, list.length, cellSize, padding, labelWidth, labelHeight);
+}
+
+function getOriginalPosition(
+  r: Risk,
+  cellOccupants: Map<string, CellOccupant[]>,
+  cellSize: number,
+  padding: { top: number; left: number },
+  labelWidth: number,
+  labelHeight: number
+): { x: number; y: number } {
+  const oL = Math.max(1, Math.min(5, r.originalLikelihood ?? r.likelihood));
+  const oC = Math.max(1, Math.min(5, r.originalConsequence ?? r.consequence));
+  const key = `${oL}-${oC}`;
+  const list = cellOccupants.get(key) ?? [];
+  const idx = list.findIndex((x) => x.type === "original" && x.risk.id === r.id);
+  if (idx < 0) return getPositionInCell(oL, oC, 0, 1, cellSize, padding, labelWidth, labelHeight);
+  return getPositionInCell(oL, oC, idx, list.length, cellSize, padding, labelWidth, labelHeight);
+}
+
+type Trend = "up" | "down" | "unchanged";
+function getTrend(r: Risk): Trend {
+  const origL = r.originalLikelihood ?? r.likelihood;
+  const origC = r.originalConsequence ?? r.consequence;
+  const origRL = getNumericalRL(origL, origC);
+  const currentRL = getNumericalRL(r.likelihood, r.consequence);
+  if (currentRL > origRL) return "up";
+  if (currentRL < origRL) return "down";
+  return "unchanged";
+}
+
+export function RiskMatrix({ categories, orgUnit: _orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
+  const categoryLabelMap: Record<string, string> = Object.fromEntries(categories.map((c) => [c.code, c.label]));
   const [showRLNumbers, setShowRLNumbers] = useState(true);
+  const [showOriginalLevel, setShowOriginalLevel] = useState(false);
   const cellSize = 64;
   const padding = { top: 24, right: 24, bottom: 24, left: 24 };
   const labelWidth = 130;
@@ -72,27 +148,86 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
     byCell.get(key)!.push(r);
   }
 
+  // Risks that have original !== current (for arrows when showOriginalLevel)
+  const risksWithOriginalDiff = showOriginalLevel
+    ? risks.filter((r) => {
+        const oL = r.originalLikelihood ?? r.likelihood;
+        const oC = r.originalConsequence ?? r.consequence;
+        return oL !== r.likelihood || oC !== r.consequence;
+      })
+    : [];
+
+  // Per-cell occupants: originals (when showOriginalLevel) + currents, so all markers in a cell share one offset layout
+  const cellOccupants = new Map<string, CellOccupant[]>();
+  for (let l = 1; l <= 5; l++) {
+    for (let c = 1; c <= 5; c++) {
+      const key = `${l}-${c}`;
+      const occupants: CellOccupant[] = [];
+      if (showOriginalLevel) {
+        for (const r of risksWithOriginalDiff) {
+          const oL = r.originalLikelihood ?? r.likelihood;
+          const oC = r.originalConsequence ?? r.consequence;
+          if (oL === l && oC === c) occupants.push({ type: "original", risk: r });
+        }
+      }
+      for (const r of byCell.get(key) ?? []) {
+        occupants.push({ type: "current", risk: r });
+      }
+      if (occupants.length > 0) cellOccupants.set(key, occupants);
+    }
+  }
+
   // Risks sorted by RL descending (highest first)
   const risksSortedByRL = [...risks].sort((a, b) => getNumericalRL(b.likelihood, b.consequence) - getNumericalRL(a.likelihood, a.consequence));
 
   return (
     <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
-          5×5 Risk Matrix — DoD MIL-STD-882
-        </h3>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "#6b7280", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={showRLNumbers}
-            onChange={(e) => setShowRLNumbers(e.target.checked)}
-          />
-          Show RL in cells
-        </label>
-      </div>
+      <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>
+        5×5 Risk Matrix — DoD MIL-STD-882
+      </h3>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ overflowX: "auto", flexShrink: 0 }}>
+        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ overflowX: "auto" }}>
           <svg width={totalW} height={totalH} style={{ minWidth: 400 }}>
+          <defs>
+            <marker id="matrix-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280" />
+            </marker>
+          </defs>
+          {/* Arrows from original to current (when showOriginalLevel and orig !== current) */}
+          {risksWithOriginalDiff.map((r) => {
+            const from = getOriginalPosition(r, cellOccupants, cellSize, padding, labelWidth, labelHeight);
+            const to = getCurrentCirclePosition(r, cellOccupants, cellSize, padding, labelWidth, labelHeight);
+            return (
+              <path
+                key={`arrow-${r.id}`}
+                d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+                fill="none"
+                stroke="#6b7280"
+                strokeWidth={1.5}
+                strokeDasharray="4 2"
+                markerEnd="url(#matrix-arrowhead)"
+              />
+            );
+          })}
+          {/* Original points (diamond) when showOriginalLevel and orig !== current */}
+          {risksWithOriginalDiff.map((r) => {
+            const oL = r.originalLikelihood ?? r.likelihood;
+            const oC = r.originalConsequence ?? r.consequence;
+            const { x, y } = getOriginalPosition(r, cellOccupants, cellSize, padding, labelWidth, labelHeight);
+            const size = 6;
+            return (
+              <polygon
+                key={`orig-${r.id}`}
+                points={`${x},${y - size} ${x + size},${y} ${x},${y + size} ${x - size},${y}`}
+                fill="none"
+                stroke="#6b7280"
+                strokeWidth={1.5}
+              >
+                <title>{r.riskName ?? "Risk"}: Original L{oL}×C{oC}</title>
+              </polygon>
+            );
+          })}
           {/* Consequence / Severity labels (x-axis, horizontal) */}
           {[1, 2, 3, 4, 5].map((c) => (
             <text
@@ -132,12 +267,13 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
           {/* Grid cells: x = consequence (column), y = likelihood (row, L=5 at top) */}
           {[1, 2, 3, 4, 5].map((l) =>
             [1, 2, 3, 4, 5].map((c) => {
+              const key = `${l}-${c}`;
+              const occupants = cellOccupants.get(key) ?? [];
+              const rl = getNumericalRL(l, c);
               const x = padding.left + labelWidth + (c - 1) * cellSize;
               const y = padding.top + labelHeight + (5 - l) * cellSize;
-              const risksInCell = byCell.get(`${l}-${c}`) ?? [];
-              const rl = getNumericalRL(l, c);
               return (
-                <g key={`${l}-${c}`}>
+                <g key={key}>
                   <rect
                     x={x + 2}
                     y={y + 2}
@@ -160,16 +296,16 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
                       {rl}
                     </text>
                   )}
-                  {risksInCell.map((r, i) => {
-                    const n = risksInCell.length;
-                    const cx = x + cellSize / 2 + (n > 1 ? (i - (n - 1) / 2) * 12 : 0);
-                    const cy = y + cellSize / 2 + (n > 1 ? (i - (n - 1) / 2) * 8 : 0);
+                  {occupants.map((occ, i) => {
+                    if (occ.type !== "current") return null;
+                    const r = occ.risk;
+                    const { x: cx, y: cy } = getPositionInCell(l, c, i, occupants.length, cellSize, padding, labelWidth, labelHeight);
                     return (
                       <circle
                         key={r.id}
                         cx={cx}
                         cy={cy}
-                        r={n > 1 ? 6 : 10}
+                        r={occupants.length > 1 ? 6 : 10}
                         fill={MATRIX_COLOR[r.riskLevel ?? "moderate"]}
                         stroke="#1f2937"
                         strokeWidth={1}
@@ -185,6 +321,17 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
             })
           )}
           </svg>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", fontSize: "0.875rem", color: "#6b7280" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+              <input type="checkbox" checked={showRLNumbers} onChange={(e) => setShowRLNumbers(e.target.checked)} />
+              Show RL in cells
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+              <input type="checkbox" checked={showOriginalLevel} onChange={(e) => setShowOriginalLevel(e.target.checked)} />
+              Show original risk level
+            </label>
+          </div>
         </div>
         {risks.length > 0 && (
           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -196,17 +343,23 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: "#6b7280" }}>RL</th>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: "#6b7280" }}>L</th>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: "#6b7280" }}>C</th>
+                    <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: "#6b7280" }} title="Trend: original → current">Trend</th>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: "#6b7280" }}>Category</th>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: "#6b7280" }}>Risk Name</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {risksSortedByRL.map((r) => (
+                  {risksSortedByRL.map((r) => {
+                    const trend = getTrend(r);
+                    return (
                     <tr key={r.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>{getNumericalRL(r.likelihood, r.consequence)}</td>
+                      <td style={{ padding: "0.5rem 0.75rem", fontWeight: 600, color: getRLColor(getNumericalRL(r.likelihood, r.consequence)) }}>{getNumericalRL(r.likelihood, r.consequence)}</td>
                       <td style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>{r.likelihood}</td>
                       <td style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>{r.consequence}</td>
-                      <td style={{ padding: "0.5rem 0.75rem", color: "#6b7280" }}>{r.category ? CATEGORY_LABEL[r.category] ?? r.category : "—"}</td>
+                      <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontSize: "1.1rem" }} title={trend === "up" ? "Increased from original" : trend === "down" ? "Decreased from original" : "Unchanged from original"}>
+                        {trend === "up" ? "↑" : trend === "down" ? "↓" : "↔"}
+                      </td>
+                      <td style={{ padding: "0.5rem 0.75rem", color: "#6b7280" }}>{r.category ? categoryLabelMap[r.category] ?? r.category : "—"}</td>
                       <td style={{ padding: "0.5rem 0.75rem", maxWidth: 280, fontSize: "0.8rem" }} title={[r.riskCondition ?? (r as { riskStatement?: string }).riskStatement, r.riskIf, r.riskThen].filter(Boolean).join(" → ")}>
                         {onSelectRisk ? (
                           <button
@@ -227,7 +380,7 @@ export function RiskMatrix({ orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>

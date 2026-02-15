@@ -1,11 +1,4 @@
-import type { RiskCategory } from "../types";
-
-const CATEGORIES: { value: RiskCategory; label: string }[] = [
-  { value: "technical", label: "Technical" },
-  { value: "schedule", label: "Schedule" },
-  { value: "cost", label: "Cost" },
-  { value: "other", label: "Other" },
-];
+import type { Category, RiskCategory } from "../types";
 
 const STATUSES: { value: string; label: string }[] = [
   { value: "open", label: "Open" },
@@ -20,6 +13,7 @@ export interface RiskFiltersState {
 }
 
 interface RiskFiltersProps {
+  categories: Category[];
   filters: RiskFiltersState;
   onChange: (filters: RiskFiltersState) => void;
 }
@@ -28,7 +22,8 @@ const checkboxStyle = { margin: 0, cursor: "pointer" as const };
 const labelStyle = { fontSize: "0.8rem", cursor: "pointer" as const, marginRight: "0.75rem" };
 const groupStyle = { display: "flex", flexWrap: "wrap" as const, alignItems: "center", gap: "0.25rem 0.5rem" };
 
-export function RiskFilters({ filters, onChange }: RiskFiltersProps) {
+export function RiskFilters({ categories, filters, onChange }: RiskFiltersProps) {
+  const categoryOptions = categories.map((c) => ({ value: c.code as RiskCategory, label: c.label }));
   const toggleCategory = (cat: RiskCategory) => {
     const next = new Set(filters.categories);
     if (next.has(cat)) next.delete(cat);
@@ -60,7 +55,7 @@ export function RiskFilters({ filters, onChange }: RiskFiltersProps) {
     >
       <div style={groupStyle}>
         <span style={{ fontSize: "0.75rem", color: "#374151", marginRight: "0.5rem", fontWeight: 700 }}>Category:</span>
-        {CATEGORIES.map((c) => (
+        {categoryOptions.map((c) => (
           <label key={c.value} style={labelStyle}>
             <input type="checkbox" checked={filters.categories.has(c.value)} onChange={() => toggleCategory(c.value)} style={checkboxStyle} />
             {" "}{c.label}

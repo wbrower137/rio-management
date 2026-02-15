@@ -1,17 +1,11 @@
-import { useState } from "react";
-import type { OrganizationalUnit, Risk, RiskCategory } from "../types";
+import { useMemo, useState } from "react";
+import type { Category, OrganizationalUnit, Risk, RiskCategory } from "../types";
 import { MitigationStepsEditor } from "./MitigationStepsEditor";
 
 const API = "/api";
 
-const CATEGORIES: { value: RiskCategory; label: string }[] = [
-  { value: "technical", label: "Technical" },
-  { value: "schedule", label: "Schedule" },
-  { value: "cost", label: "Cost" },
-  { value: "other", label: "Other" },
-];
-
 interface RiskRegisterProps {
+  categories: Category[];
   orgUnit: OrganizationalUnit;
   risks: Risk[];
   loading: boolean;
@@ -36,9 +30,78 @@ const labelStyle = { display: "block" as const, fontSize: "0.75rem", marginBotto
 const btnPrimary = { padding: "0.5rem 1rem", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer" as const };
 const btnSecondary = { ...btnPrimary, background: "#6b7280" };
 
-export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }: RiskRegisterProps) {
+// Numerical RL 1-25 for Level column sort (same mapping as matrix)
+const NUMERICAL_RL: Record<string, number> = {
+  "1-1": 1, "1-2": 3, "1-3": 5, "1-4": 9, "1-5": 12,
+  "2-1": 2, "2-2": 4, "2-3": 11, "2-4": 15, "2-5": 17,
+  "3-1": 6, "3-2": 10, "3-3": 14, "3-4": 19, "3-5": 21,
+  "4-1": 7, "4-2": 13, "4-3": 18, "4-4": 22, "4-5": 24,
+  "5-1": 8, "5-2": 16, "5-3": 20, "5-4": 23, "5-5": 25,
+};
+function getNumericalRL(likelihood: number, consequence: number): number {
+  const key = `${Math.max(1, Math.min(5, likelihood))}-${Math.max(1, Math.min(5, consequence))}`;
+  return NUMERICAL_RL[key] ?? 13;
+}
+
+export type RiskRegisterSortKey = "riskName" | "category" | "likelihood" | "consequence" | "riskLevel" | "status" | "owner" | "lastUpdated";
+
+export function RiskRegister({ categories, orgUnit, risks, loading, onUpdate, onSelectRisk }: RiskRegisterProps) {
+  const categoryOptions = categories.map((c) => ({ value: c.code as RiskCategory, label: c.label }));
   const [showAddForm, setShowAddForm] = useState(false);
   const [editing, setEditing] = useState<Risk | null>(null);
+  const [sortBy, setSortBy] = useState<RiskRegisterSortKey>("riskName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: RiskRegisterSortKey) => {
+    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedRisks = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...risks].sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "riskName":
+          cmp = (a.riskName ?? "").localeCompare(b.riskName ?? "", undefined, { sensitivity: "base" });
+          break;
+        case "category": {
+          const labelA = categoryOptions.find((c) => c.value === a.category)?.label ?? a.category ?? "";
+          const labelB = categoryOptions.find((c) => c.value === b.category)?.label ?? b.category ?? "";
+          cmp = labelA.localeCompare(labelB, undefined, { sensitivity: "base" });
+          break;
+        }
+        case "likelihood":
+          cmp = a.likelihood - b.likelihood;
+          break;
+        case "consequence":
+          cmp = a.consequence - b.consequence;
+          break;
+        case "riskLevel":
+          cmp = getNumericalRL(a.likelihood, a.consequence) - getNumericalRL(b.likelihood, b.consequence);
+          break;
+        case "status":
+          cmp = (a.status ?? "").localeCompare(b.status ?? "", undefined, { sensitivity: "base" });
+          break;
+        case "owner":
+          cmp = (a.owner ?? "").localeCompare(b.owner ?? "", undefined, { sensitivity: "base" });
+          break;
+        case "lastUpdated": {
+          const dateA = new Date(a.lastUpdated ?? a.updatedAt ?? 0).getTime();
+          const dateB = new Date(b.lastUpdated ?? b.updatedAt ?? 0).getTime();
+          cmp = dateA - dateB;
+          break;
+        }
+        default:
+          break;
+      }
+      return cmp * dir;
+    });
+  }, [risks, sortBy, sortDir, categoryOptions]);
+
   const [newRisk, setNewRisk] = useState({
     riskName: "",
     riskCondition: "",
@@ -63,6 +126,7 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
     mitigationStrategy: "",
     owner: "",
     status: "",
+    statusChangeRationale: "",
   });
 
 
@@ -98,8 +162,12 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
     if (!editing) return;
     const lChanged = editForm.likelihood !== editing.likelihood;
     const cChanged = editForm.consequence !== editing.consequence;
+    const newStatus = editForm.status || editing.status;
+    const statusChangingToClosedOrAccepted =
+      (newStatus === "closed" || newStatus === "accepted") && newStatus !== editing.status;
     if (lChanged && !editForm.likelihoodChangeReason.trim()) return;
     if (cChanged && !editForm.consequenceChangeReason.trim()) return;
+    if (statusChangingToClosedOrAccepted && !editForm.statusChangeRationale.trim()) return;
     fetch(`${API}/risks/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -115,7 +183,8 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
         consequenceChangeReason: cChanged ? editForm.consequenceChangeReason : undefined,
         mitigationStrategy: editForm.mitigationStrategy || null,
         owner: editForm.owner || null,
-        status: editForm.status || editing.status,
+        status: newStatus,
+        statusChangeRationale: statusChangingToClosedOrAccepted ? editForm.statusChangeRationale : undefined,
       }),
     })
       .then((r) => r.json())
@@ -142,6 +211,7 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
       mitigationStrategy: r.mitigationStrategy ?? "",
       owner: r.owner ?? "",
       status: r.status,
+      statusChangeRationale: "",
     });
   };
 
@@ -221,16 +291,16 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
               <div>
                 <label style={labelStyle}>Category</label>
-                <select
-                  value={newRisk.category}
-                  onChange={(e) => setNewRisk((p) => ({ ...p, category: e.target.value as RiskCategory }))}
-                  style={formInputStyle}
-                >
-                  <option value="">—</option>
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
+                            <select
+                              value={newRisk.category}
+                              onChange={(e) => setNewRisk((p) => ({ ...p, category: e.target.value as RiskCategory }))}
+                              style={formInputStyle}
+                            >
+                              <option value="">—</option>
+                              {categoryOptions.map((c) => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                              ))}
+                            </select>
               </div>
               <div>
                 <label style={labelStyle}>Likelihood (1-5)</label>
@@ -309,18 +379,38 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Risk Name</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Category</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "center", fontSize: "0.75rem", color: "#6b7280" }}>L</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "center", fontSize: "0.75rem", color: "#6b7280" }}>C</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Level</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Status</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", color: "#6b7280" }}>Owner</th>
-                <th style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.75rem", color: "#6b7280" }}>Actions</th>
+                {([
+                  { key: "riskName" as const, label: "Risk Name", align: "left" as const },
+                  { key: "category" as const, label: "Category", align: "left" as const },
+                  { key: "likelihood" as const, label: "L", align: "center" as const },
+                  { key: "consequence" as const, label: "C", align: "center" as const },
+                  { key: "riskLevel" as const, label: "Level", align: "left" as const },
+                  { key: "status" as const, label: "Status", align: "left" as const },
+                  { key: "owner" as const, label: "Owner", align: "left" as const },
+                  { key: "lastUpdated" as const, label: "Last Updated", align: "right" as const },
+                ] as const).map(({ key, label, align }) => (
+                  <th
+                    key={key}
+                    style={{
+                      padding: "0.75rem 1rem",
+                      textAlign: align,
+                      fontSize: "0.75rem",
+                      color: "#6b7280",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      whiteSpace: "nowrap",
+                    }}
+                    onClick={() => handleSort(key)}
+                    title={`Sort by ${label}`}
+                  >
+                    {label}
+                    {sortBy === key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {risks.map((r) =>
+              {sortedRisks.map((r) =>
                 editing?.id === r.id ? (
                   <tr key={r.id} style={{ borderBottom: "1px solid #f3f4f6", background: "#fffbeb" }}>
                     <td colSpan={8} style={{ padding: "1rem" }}>
@@ -375,7 +465,7 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
                               style={formInputStyle}
                             >
                               <option value="">—</option>
-                              {CATEGORIES.map((c) => (
+                              {categoryOptions.map((c) => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
@@ -443,6 +533,19 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
                             </select>
                           </div>
                         </div>
+                        {((editForm.status === "closed" || editForm.status === "accepted") && editForm.status !== editing.status) && (
+                          <div>
+                            <label style={labelStyle}>Rationale for status change *</label>
+                            <textarea
+                              value={editForm.statusChangeRationale}
+                              onChange={(e) => setEditForm((p) => ({ ...p, statusChangeRationale: e.target.value }))}
+                              required
+                              rows={2}
+                              style={formInputStyle}
+                              placeholder="Why is this risk being closed or accepted?"
+                            />
+                          </div>
+                        )}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                           <div>
                             <label style={labelStyle}>Mitigation Strategy</label>
@@ -479,23 +582,16 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
                 ) : (
                   <tr key={r.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
                     <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", maxWidth: 280 }} title={[r.riskCondition ?? (r as { riskStatement?: string }).riskStatement, r.riskIf, r.riskThen].filter(Boolean).join(" → ")}>
-                      {onSelectRisk ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectRisk(r.id)}
-                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", textDecoration: "underline" }}
-                        >
-                          <strong>{(() => {
-                            const n = r.riskName ?? "";
-                            return `${n.slice(0, 60)}${n.length > 60 ? "…" : ""}`;
-                          })()}</strong>
-                        </button>
-                      ) : (
+                      <button
+                        type="button"
+                        onClick={() => (onSelectRisk ? onSelectRisk(r.id) : startEdit(r))}
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", textDecoration: "underline" }}
+                      >
                         <strong>{(() => {
                           const n = r.riskName ?? "";
                           return `${n.slice(0, 60)}${n.length > 60 ? "…" : ""}`;
                         })()}</strong>
-                      )}
+                      </button>
                       <div style={{ fontSize: "0.75rem", marginTop: "0.2rem", color: "#6b7280" }}>
                         Condition: {(() => {
                           const c = r.riskCondition ?? (r as { riskStatement?: string }).riskStatement ?? "";
@@ -504,7 +600,7 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
                       </div>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>
-                      {r.category ? CATEGORIES.find((c) => c.value === r.category)?.label ?? r.category : "—"}
+                      {r.category ? categoryOptions.find((c) => c.value === r.category)?.label ?? r.category : "—"}
                     </td>
                     <td style={{ padding: "0.75rem 1rem", textAlign: "center", fontSize: "0.875rem" }}>{r.likelihood}</td>
                     <td style={{ padding: "0.75rem 1rem", textAlign: "center", fontSize: "0.875rem" }}>{r.consequence}</td>
@@ -526,14 +622,11 @@ export function RiskRegister({ orgUnit, risks, loading, onUpdate, onSelectRisk }
                     </td>
                     <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", textTransform: "capitalize" }}>{r.status}</td>
                     <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{r.owner ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(r)}
-                        style={{ ...btnSecondary, padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                      >
-                        Edit
-                      </button>
+                    <td style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.8125rem", color: "#6b7280" }}>
+                      {(() => {
+                        const d = r.lastUpdated ?? r.updatedAt;
+                        return d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
+                      })()}
                     </td>
                   </tr>
                 )

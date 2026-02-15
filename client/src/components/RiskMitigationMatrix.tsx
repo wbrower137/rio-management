@@ -51,6 +51,8 @@ interface RiskMitigationMatrixProps {
   steps?: MitigationStep[] | null;
   /** When true, show the original (immutable) risk level on the matrix. No arrow from original. */
   showOriginalLxC?: boolean;
+  /** When provided, the "Show original L×C" toggle is rendered below the matrix and this is called when it changes. */
+  onShowOriginalLxCChange?: (value: boolean) => void;
 }
 
 interface PointInfo {
@@ -66,7 +68,7 @@ interface PointInfo {
   isOriginalAndCurrent?: boolean;
 }
 
-export function RiskMitigationMatrix({ risk, steps: stepsProp, showOriginalLxC = false }: RiskMitigationMatrixProps) {
+export function RiskMitigationMatrix({ risk, steps: stepsProp, showOriginalLxC = false, onShowOriginalLxCChange }: RiskMitigationMatrixProps) {
   const [stepsInternal, setStepsInternal] = useState<MitigationStep[]>([]);
   const [loadingInternal, setLoadingInternal] = useState(true);
   const [showRLNumbers, setShowRLNumbers] = useState(true);
@@ -228,15 +230,9 @@ export function RiskMitigationMatrix({ risk, steps: stepsProp, showOriginalLxC =
 
   return (
     <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
-          Mitigation Trajectory — 5×5 Matrix
-        </h3>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "#6b7280", cursor: "pointer" }}>
-          <input type="checkbox" checked={showRLNumbers} onChange={(e) => setShowRLNumbers(e.target.checked)} />
-          Show RL in cells
-        </label>
-      </div>
+      <h3 style={{ margin: "0 0 0.75rem", fontSize: "1rem", fontWeight: 600 }}>
+        Mitigation Trajectory — 5×5 Matrix
+      </h3>
       <div style={{ overflowX: "auto" }}>
         <svg width={totalW} height={totalH} style={{ minWidth: 400 }}>
           <defs>
@@ -372,6 +368,18 @@ export function RiskMitigationMatrix({ risk, steps: stepsProp, showOriginalLxC =
             );
           })}
         </svg>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginTop: "0.5rem", fontSize: "0.875rem", color: "#6b7280" }}>
+        {onShowOriginalLxCChange != null && (
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+            <input type="checkbox" checked={showOriginalLxC} onChange={(e) => onShowOriginalLxCChange(e.target.checked)} />
+            Show original L×C
+          </label>
+        )}
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+          <input type="checkbox" checked={showRLNumbers} onChange={(e) => setShowRLNumbers(e.target.checked)} />
+          Show RL in cells
+        </label>
       </div>
     </div>
   );

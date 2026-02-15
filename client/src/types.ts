@@ -16,7 +16,17 @@ export interface OrganizationalUnit {
   _count?: { risks: number };
 }
 
-export type RiskCategory = "technical" | "schedule" | "cost" | "other";
+/** Category code (from Settings → Risk Categories). Use Category[] from API for labels. */
+export type RiskCategory = string;
+
+export interface Category {
+  id: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Risk {
   id: string;
@@ -35,8 +45,12 @@ export interface Risk {
   mitigationPlan: string | null;
   owner: string | null;
   status: string;
+  /** When status is Closed or Accepted, the rationale required when it was set. */
+  statusChangeRationale?: string;
   createdAt: string;
   updatedAt: string;
+  /** Latest of risk.updatedAt and any mitigation step updatedAt (from list API) */
+  lastUpdated?: string;
 }
 
 export interface MitigationStep {

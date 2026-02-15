@@ -7,7 +7,8 @@ import { RiskMatrix } from "./components/RiskMatrix";
 import { RiskDetailView } from "./components/RiskDetailView";
 import { LegalEntityManager } from "./components/LegalEntityManager";
 import { OrgUnitManager } from "./components/OrgUnitManager";
-import type { LegalEntity, OrganizationalUnit, Risk } from "./types";
+import { CategoryManager } from "./components/CategoryManager";
+import type { Category, LegalEntity, OrganizationalUnit, Risk } from "./types";
 
 const API = "/api";
 
@@ -23,12 +24,16 @@ export default function App() {
   const [risksLoading, setRisksLoading] = useState(false);
   const [filters, setFilters] = useState<RiskFiltersState>({ categories: new Set(), statuses: new Set() });
   const [selectedRiskId, setSelectedRiskId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const refreshLegalEntities = useCallback(() => {
     fetch(`${API}/legal-entities`)
-      .then((r) => r.json())
-      .then(setLegalEntities)
-      .catch((e) => console.error("Failed to load legal entities:", e));
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setLegalEntities(Array.isArray(data) ? data : []))
+      .catch((e) => {
+        console.error("Failed to load legal entities:", e);
+        setLegalEntities([]);
+      });
   }, []);
 
   const refreshRisks = useCallback(() => {
@@ -48,9 +53,23 @@ export default function App() {
       .finally(() => setRisksLoading(false));
   }, [selectedOrgUnit?.id]);
 
+  const refreshCategories = useCallback(() => {
+    fetch(`${API}/categories`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setCategories(Array.isArray(data) ? data : []))
+      .catch((e) => {
+        console.error("Failed to load categories:", e);
+        setCategories([]);
+      });
+  }, []);
+
   useEffect(() => {
     refreshLegalEntities();
   }, [refreshLegalEntities]);
+
+  useEffect(() => {
+    refreshCategories();
+  }, [refreshCategories]);
 
   useEffect(() => {
     if (selectedOrgUnit) refreshRisks();
@@ -72,6 +91,7 @@ export default function App() {
   ];
 
   const selectedRisk = selectedRiskId ? risks.find((r) => r.id === selectedRiskId) : null;
+  const safeCategories = Array.isArray(categories) ? categories : [];
 
   return (
     <>
@@ -96,12 +116,13 @@ export default function App() {
               <>
                 {!selectedRisk && (
                   <section style={{ marginBottom: "1rem" }}>
-                    <RiskFilters filters={filters} onChange={setFilters} />
+                    <RiskFilters categories={safeCategories} filters={filters} onChange={setFilters} />
                   </section>
                 )}
 
                 {selectedRisk ? (
                   <RiskDetailView
+                    categories={safeCategories}
                     risk={selectedRisk}
                     orgUnit={selectedOrgUnit}
                     onBack={() => setSelectedRiskId(null)}
@@ -132,6 +153,7 @@ export default function App() {
                     {riskTab === "register" && (
                       <section>
                         <RiskRegister
+                          categories={safeCategories}
                           orgUnit={selectedOrgUnit}
                           risks={filterRisks(risks, filters)}
                           loading={risksLoading}
@@ -143,6 +165,7 @@ export default function App() {
                     {riskTab === "matrix" && (
                       <section>
                         <RiskMatrix
+                          categories={safeCategories}
                           orgUnit={selectedOrgUnit}
                           risks={filterRisks(risks, filters)}
                           onSelectRisk={setSelectedRiskId}
@@ -170,6 +193,7 @@ export default function App() {
 
         {view === "settings" && (
           <section style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <CategoryManager onUpdate={() => { refreshCategories(); refreshRisks(); }} />
             <LegalEntityManager onUpdate={refreshLegalEntities} />
             <OrgUnitManager legalEntities={legalEntities} onUpdate={refreshLegalEntities} />
           </section>

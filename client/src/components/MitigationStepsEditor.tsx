@@ -18,7 +18,7 @@ interface MitigationStepsEditorProps {
   showOriginalLxC?: boolean;
 }
 
-export function MitigationStepsEditor({ riskId, onUpdate, onStepsChange, risk, showOriginalLxC = false }: MitigationStepsEditorProps) {
+export function MitigationStepsEditor({ riskId, onUpdate, onStepsChange, risk, showOriginalLxC: _showOriginalLxC = false }: MitigationStepsEditorProps) {
   const [steps, setSteps] = useState<MitigationStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);

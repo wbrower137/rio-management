@@ -31,11 +31,15 @@ enum MitigationStrategy {
   burn_down
 }
 
-enum RiskCategory {
-  technical
-  schedule
-  cost
-  other
+model Category {
+  id        String   @id @default(uuid())
+  code      String   @unique  // e.g. technical, schedule
+  label     String   // e.g. Technical, Schedule
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Category")
 }
 
 model LegalEntity {
@@ -77,7 +81,7 @@ model Risk {
   riskCondition         String            // Context and root cause (DoD 2.2.3)
   riskIf                String            // The risk event that, if it occurs, has unwanted effects
   riskThen              String            // Consequences that will impact the program
-  category              RiskCategory?     // Technical, Schedule, Cost, Other
+  category              String?           // Category.code (user-managed list in Settings)
   originalLikelihood    Int               // Immutable: set at creation, never changed. If wrong, delete and recreate.
   originalConsequence   Int               // Immutable: set at creation, never changed. If wrong, delete and recreate.
   likelihood            Int               // 1-5: Current (editable with change reason)
@@ -93,6 +97,22 @@ model Risk {
   organizationalUnit OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
   versions             RiskVersion[]
   mitigationSteps      MitigationStep[]
+  auditLogs             RiskAuditLog[]
+}
+
+// Audit log: every create/update/delete on a risk or its mitigation steps (separate from History/versioning)
+model RiskAuditLog {
+  id         String   @id @default(uuid())
+  riskId     String
+  entityType String   // "risk" | "mitigation_step"
+  entityId   String   // risk.id or mitigationStep.id
+  action     String   // "created" | "updated" | "deleted"
+  details    Json?    // e.g. { changedFields: ["riskCondition", "status"], stepNumber?: 1 }
+  createdAt  DateTime @default(now())
+
+  risk Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@index([riskId, createdAt])
 }
 
 // Structured mitigation steps per risk (replaces free-form mitigation plan for tracking)
@@ -115,9 +135,22 @@ model MitigationStep {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  risk Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  risk     Risk                    @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  versions MitigationStepVersion[]
 
   @@index([riskId])
+}
+
+model MitigationStepVersion {
+  id               String   @id @default(uuid())
+  mitigationStepId String
+  version          Int      // 1 = create, 2+ = updates
+  snapshot         Json     // Full step state for change diffing
+  createdAt        DateTime @default(now())
+
+  mitigationStep MitigationStep @relation(fields: [mitigationStepId], references: [id], onDelete: Cascade)
+
+  @@index([mitigationStepId, createdAt])
 }
 
 // Full snapshot of risk at each change - enables version control and time-travel
@@ -128,6 +161,7 @@ model RiskVersion {
   snapshot                Json     // Full risk state: { riskName, riskCondition, riskIf, riskThen, category, likelihood, consequence, riskLevel, ... }
   likelihoodChangeReason  String?  // Required when likelihood changes
   consequenceChangeReason String?  // Required when consequence changes
+  statusChangeRationale   String?  // Required when status changes to closed or accepted
   createdAt               DateTime @default(now())
 
   risk Risk @relation(fields: [riskId], references: [id], onDelete: Cascade)
