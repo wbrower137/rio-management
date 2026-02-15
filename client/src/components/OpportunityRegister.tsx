@@ -13,10 +13,16 @@ interface OpportunityRegisterProps {
   onSelectOpportunity?: (id: string) => void;
 }
 
-const levelColor: Record<string, string> = {
-  low: "#22c55e",
-  moderate: "#eab308",
-  high: "#ef4444",
+// Level colors and labels — match 5×5 Opportunity Matrix (light purple / medium blue / light blue)
+const OPP_LEVEL_COLOR: Record<string, string> = {
+  low: "#ddd6fe",      // Good — light purple
+  moderate: "#60a5fa", // Very Good — medium blue
+  high: "#38bdf8",     // Excellent — light blue
+};
+const OPP_LEVEL_LABEL: Record<string, string> = {
+  low: "Good",
+  moderate: "Very Good",
+  high: "Excellent",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -427,12 +433,11 @@ export function OpportunityRegister({ categories = [], orgUnit, opportunities = 
                           borderRadius: 4,
                           fontSize: "0.75rem",
                           fontWeight: 600,
-                          background: levelColor[o.opportunityLevel ?? "moderate"] + "22",
-                          color: levelColor[o.opportunityLevel ?? "moderate"],
-                          textTransform: "capitalize",
+                          background: (OPP_LEVEL_COLOR[o.opportunityLevel ?? "moderate"] ?? "#e5e7eb") + "33",
+                          color: "#374151",
                         }}
                       >
-                        {o.opportunityLevel ?? "—"}
+                        {OPP_LEVEL_LABEL[o.opportunityLevel ?? "moderate"] ?? (o.opportunityLevel ?? "—")}
                       </span>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{STATUS_LABELS[o.status] ?? o.status}</td>

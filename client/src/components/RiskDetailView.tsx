@@ -19,6 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
   mitigating: "Mitigating",
   accepted: "Accepted",
   closed: "Closed",
+  realized: "Realized",
 };
 
 const levelColor: Record<string, string> = {
@@ -98,6 +99,8 @@ interface RiskDetailViewProps {
   orgUnit: OrganizationalUnit;
   onBack: () => void;
   onUpdate: () => void;
+  /** When provided, call after creating an issue from this risk (e.g. to open the new issue). */
+  onIssueCreated?: (issueId: string) => void;
 }
 
 const formInputStyle = { width: "100%" as const, padding: "0.5rem", borderRadius: 6, border: "1px solid #d1d5db" };
@@ -105,7 +108,7 @@ const labelStyle = { display: "block" as const, fontSize: "0.75rem", marginBotto
 const btnPrimary = { padding: "0.5rem 1rem", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer" as const };
 const btnSecondary = { ...btnPrimary, background: "#6b7280" };
 
-export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: RiskDetailViewProps) {
+export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate, onIssueCreated }: RiskDetailViewProps) {
   const categoryLabels = new Map(categories.map((c) => [c.code, c.label]));
   const categoryOptions = categories.map((c) => ({ value: c.code as RiskCategory, label: c.label }));
   const [tab, setTab] = useState<DetailTab>("overview");
@@ -116,6 +119,32 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [auditLogLoading, setAuditLogLoading] = useState(false);
   const [auditLogError, setAuditLogError] = useState<string | null>(null);
+  /** Full risk from API (includes linkedIssue when status is Realized). */
+  const [fullRisk, setFullRisk] = useState<Risk | null>(null);
+  const [showCreateIssueModal, setShowCreateIssueModal] = useState(false);
+  const [createIssueForm, setCreateIssueForm] = useState({
+    issueName: "",
+    description: "",
+    owner: "",
+    category: "",
+    consequence: 3,
+  });
+  const [createIssueSubmitting, setCreateIssueSubmitting] = useState(false);
+  const [createIssueError, setCreateIssueError] = useState<string | null>(null);
+
+  const displayRisk = fullRisk ?? risk;
+  const linkedIssue = displayRisk.linkedIssue ?? null;
+
+  const loadFullRisk = () => {
+    fetch(`${API}/risks/${risk.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Risk | null) => data && setFullRisk(data))
+      .catch(() => setFullRisk(null));
+  };
+
+  useEffect(() => {
+    loadFullRisk();
+  }, [risk.id]);
 
   const loadMitigationSteps = () => {
     fetch(`${API}/risks/${risk.id}/mitigation-steps`)
@@ -189,11 +218,11 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
     e.preventDefault();
     const lChanged = editForm.likelihood !== risk.likelihood;
     const cChanged = editForm.consequence !== risk.consequence;
-    const statusChangingToClosedOrAccepted =
-      (editForm.status === "closed" || editForm.status === "accepted") && editForm.status !== risk.status;
+    const statusChangingToClosedAcceptedOrRealized =
+      (editForm.status === "closed" || editForm.status === "accepted" || editForm.status === "realized") && editForm.status !== risk.status;
     if (lChanged && !editForm.likelihoodChangeReason.trim()) return;
     if (cChanged && !editForm.consequenceChangeReason.trim()) return;
-    if (statusChangingToClosedOrAccepted && !editForm.statusChangeRationale.trim()) return;
+    if (statusChangingToClosedAcceptedOrRealized && !editForm.statusChangeRationale.trim()) return;
     fetch(`${API}/risks/${risk.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -210,7 +239,7 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
         mitigationStrategy: editForm.mitigationStrategy || null,
         owner: editForm.owner || null,
         status: editForm.status,
-        statusChangeRationale: statusChangingToClosedOrAccepted ? editForm.statusChangeRationale : undefined,
+        statusChangeRationale: statusChangingToClosedAcceptedOrRealized ? editForm.statusChangeRationale : undefined,
       }),
     })
       .then(() => {
@@ -229,12 +258,16 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
     { id: "audit", label: "Audit Log" },
   ];
 
+  const detailTheme = { bg: "#fffbeb", border: "#d97706", badge: "#d97706" }; // Risk: amber
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+    <div style={{ background: detailTheme.bg, borderLeft: "4px solid " + detailTheme.border, borderRadius: 8, padding: "1rem 1rem 1rem 1.25rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
         <button type="button" onClick={onBack} style={{ ...btnSecondary, padding: "0.4rem 0.75rem", fontSize: "0.875rem" }}>
           ← Back
         </button>
+        <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "0.25rem 0.5rem", borderRadius: 6, background: detailTheme.badge, color: "white" }}>
+          Risk
+        </span>
         <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}>{risk.riskName ?? "Risk"}</h2>
       </div>
 
@@ -289,9 +322,10 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
                     <option value="mitigating">Mitigating</option>
                     <option value="accepted">Accepted</option>
                     <option value="closed">Closed</option>
+                    <option value="realized">Realized</option>
                   </select>
                 </div>
-                {((editForm.status === "closed" || editForm.status === "accepted") && editForm.status !== risk.status) && (
+                {((editForm.status === "closed" || editForm.status === "accepted" || editForm.status === "realized") && editForm.status !== risk.status) && (
                   <div style={{ gridColumn: "1 / -1" }}>
                     <label style={labelStyle}>Rationale for status change *</label>
                     <textarea
@@ -300,7 +334,7 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
                       required
                       rows={2}
                       style={formInputStyle}
-                      placeholder="Why is this risk being closed or accepted?"
+                      placeholder={editForm.status === "realized" ? "Why has this risk been realized?" : "Why is this risk being closed or accepted?"}
                     />
                   </div>
                 )}
@@ -384,17 +418,62 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
                     <dd style={{ margin: 0 }}>
                       <span
                         title={
-                          (risk.status === "closed" || risk.status === "accepted") && risk.statusChangeRationale
-                            ? risk.statusChangeRationale
+                          (displayRisk.status === "closed" || displayRisk.status === "accepted" || displayRisk.status === "realized") && displayRisk.statusChangeRationale
+                            ? displayRisk.statusChangeRationale
                             : undefined
                         }
                         style={{
-                          cursor: (risk.status === "closed" || risk.status === "accepted") && risk.statusChangeRationale ? "help" : undefined,
+                          cursor: (displayRisk.status === "closed" || displayRisk.status === "accepted" || displayRisk.status === "realized") && displayRisk.statusChangeRationale ? "help" : undefined,
                         }}
                       >
-                        {STATUS_LABELS[risk.status] ?? risk.status}
+                        {STATUS_LABELS[displayRisk.status] ?? displayRisk.status}
                       </span>
                     </dd>
+                    {displayRisk.status === "realized" && (
+                      <>
+                        <dt style={{ color: "#6b7280", fontWeight: 600, minWidth: 82 }}>Realized</dt>
+                        <dd style={{ margin: 0 }}>
+                          {linkedIssue ? (
+                            <span>
+                              <a
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); onIssueCreated?.(linkedIssue.id); }}
+                                style={{ color: "#2563eb", fontWeight: 500 }}
+                              >
+                                View issue: {linkedIssue.issueName}
+                              </a>
+                            </span>
+                          ) : (
+                            <span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const parts = [
+                                    displayRisk.riskCondition ? `Condition: ${displayRisk.riskCondition}` : "",
+                                    displayRisk.riskIf ? `If: ${displayRisk.riskIf}` : "",
+                                    displayRisk.riskThen ? `Then: ${displayRisk.riskThen}` : "",
+                                    "",
+                                    "Edit the above to describe the issue.",
+                                  ].filter(Boolean);
+                                  setCreateIssueForm({
+                                    issueName: displayRisk.riskName ?? "",
+                                    description: parts.join("\n"),
+                                    owner: displayRisk.owner ?? "",
+                                    category: (displayRisk.category as string) ?? "",
+                                    consequence: displayRisk.consequence ?? 3,
+                                  });
+                                  setCreateIssueError(null);
+                                  setShowCreateIssueModal(true);
+                                }}
+                                style={{ ...btnPrimary, fontSize: "0.8125rem", padding: "0.35rem 0.75rem" }}
+                              >
+                                Create issue from this risk
+                              </button>
+                            </span>
+                          )}
+                        </dd>
+                      </>
+                    )}
                     <dt style={{ color: "#6b7280", fontWeight: 600 }}>Owner</dt>
                     <dd style={{ margin: 0 }}>{risk.owner ?? "—"}</dd>
                     <dt style={{ color: "#6b7280", fontWeight: 600 }}>Last Updated</dt>
@@ -578,6 +657,81 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate }: 
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {showCreateIssueModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={() => !createIssueSubmitting && setShowCreateIssueModal(false)}>
+          <div style={{ background: "white", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", maxWidth: 520, width: "90%", maxHeight: "90vh", overflow: "auto", padding: "1.5rem" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 1rem", fontSize: "1.125rem", fontWeight: 600 }}>Create issue from realized risk</h3>
+            <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "#6b7280" }}>Pre-filled from the risk. Edit as needed, then create the issue.</p>
+            {createIssueError && <p style={{ color: "#dc2626", fontSize: "0.875rem", margin: "0 0 0.75rem" }}>{createIssueError}</p>}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setCreateIssueError(null);
+                setCreateIssueSubmitting(true);
+                fetch(`${API}/risks/${risk.id}/create-issue`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    issueName: createIssueForm.issueName.trim() || undefined,
+                    description: createIssueForm.description.trim() || undefined,
+                    owner: createIssueForm.owner.trim() || null,
+                    category: createIssueForm.category.trim() || null,
+                    consequence: createIssueForm.consequence,
+                  }),
+                })
+                  .then((r) => {
+                    if (!r.ok) return r.json().then((err: { error?: string }) => Promise.reject(new Error(err?.error ?? `HTTP ${r.status}`)));
+                    return r.json();
+                  })
+                  .then((issue: { id: string }) => {
+                    loadFullRisk();
+                    onUpdate();
+                    setShowCreateIssueModal(false);
+                    onIssueCreated?.(issue.id);
+                  })
+                  .catch((err) => {
+                    setCreateIssueError(err instanceof Error ? err.message : "Failed to create issue");
+                  })
+                  .finally(() => setCreateIssueSubmitting(false));
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
+              <div>
+                <label style={labelStyle}>Issue name *</label>
+                <input value={createIssueForm.issueName} onChange={(e) => setCreateIssueForm((p) => ({ ...p, issueName: e.target.value }))} required style={formInputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Description (edit to describe the issue)</label>
+                <textarea value={createIssueForm.description} onChange={(e) => setCreateIssueForm((p) => ({ ...p, description: e.target.value }))} rows={6} style={formInputStyle} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={labelStyle}>Owner</label>
+                  <input value={createIssueForm.owner} onChange={(e) => setCreateIssueForm((p) => ({ ...p, owner: e.target.value }))} style={formInputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select value={createIssueForm.category} onChange={(e) => setCreateIssueForm((p) => ({ ...p, category: e.target.value }))} style={formInputStyle}>
+                    <option value="">—</option>
+                    {categoryOptions.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Consequence (1–5)</label>
+                <input type="number" min={1} max={5} value={createIssueForm.consequence} onChange={(e) => setCreateIssueForm((p) => ({ ...p, consequence: parseInt(e.target.value) || 1 }))} style={formInputStyle} />
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button type="button" onClick={() => !createIssueSubmitting && setShowCreateIssueModal(false)} style={btnSecondary} disabled={createIssueSubmitting}>Cancel</button>
+                <button type="submit" style={btnPrimary} disabled={createIssueSubmitting}>{createIssueSubmitting ? "Creating…" : "Create issue"}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

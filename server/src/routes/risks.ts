@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { getRiskLevel, getNumericalRiskLevel } from "../lib/riskLevel.js";
+import { getIssueLevel } from "../lib/issueLevel.js";
 
 export const riskRoutes = Router();
 
@@ -108,6 +109,7 @@ type AuditDetails = {
   likelihoodChangeReason?: string;
   consequenceChangeReason?: string;
   statusChangeRationale?: string;
+  issueCreatedFromRealizedRisk?: { issueId: string; issueName: string };
 };
 
 /** Serialize a value for audit storage (Date → ISO string) so JSON is consistent. */
@@ -763,7 +765,7 @@ riskRoutes.get("/:id", async (req, res) => {
       (risk as { originalLikelihood: number; originalConsequence: number }).originalLikelihood = orig.originalLikelihood;
       (risk as { originalLikelihood: number; originalConsequence: number }).originalConsequence = orig.originalConsequence;
     }
-    if (risk.status === "closed" || risk.status === "accepted") {
+    if (risk.status === "closed" || risk.status === "accepted" || risk.status === "realized") {
       const latestWithRationale = await prisma.riskVersion.findFirst({
         where: { riskId: risk.id, statusChangeRationale: { not: null } },
         orderBy: { createdAt: "desc" },
@@ -773,10 +775,97 @@ riskRoutes.get("/:id", async (req, res) => {
         (risk as { statusChangeRationale?: string }).statusChangeRationale = latestWithRationale.statusChangeRationale;
       }
     }
-    res.json(risk);
+    // Include linked issue when risk is realized (at most one)
+    const linkedIssues = await prisma.issue.findMany({
+      where: { sourceRiskId: risk.id },
+      select: { id: true, issueName: true },
+      take: 1,
+    });
+    const linkedIssue = linkedIssues[0] ?? null;
+    res.json({ ...risk, linkedIssue });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch risk" });
+  }
+});
+
+/** Create an issue from a realized risk. Pre-fills name, description (condition/if/then), owner, category, consequence. */
+riskRoutes.post("/:id/create-issue", async (req, res) => {
+  try {
+    const riskId = req.params.id;
+    const risk = await prisma.risk.findUnique({
+      where: { id: riskId },
+      include: { organizationalUnit: { select: { id: true } } },
+    });
+    if (!risk) return res.status(404).json({ error: "Risk not found" });
+    if (risk.status !== "realized") {
+      return res.status(400).json({ error: "Issue can only be created from a risk with status Realized" });
+    }
+    const existing = await prisma.issue.findFirst({ where: { sourceRiskId: riskId }, select: { id: true } });
+    if (existing) {
+      return res.status(400).json({ error: "An issue has already been created from this risk" });
+    }
+
+    const body = req.body as {
+      issueName?: string;
+      description?: string;
+      owner?: string | null;
+      category?: string | null;
+      consequence?: number;
+    };
+    const issueName = typeof body.issueName === "string" && body.issueName.trim()
+      ? body.issueName.trim()
+      : risk.riskName;
+    const defaultDescription = [
+      risk.riskCondition ? `Condition: ${risk.riskCondition}` : "",
+      risk.riskIf ? `If: ${risk.riskIf}` : "",
+      risk.riskThen ? `Then: ${risk.riskThen}` : "",
+      "",
+      "Edit the above to describe the issue.",
+    ].filter(Boolean).join("\n");
+    const description = typeof body.description === "string" ? (body.description.trim() || null) : defaultDescription;
+    const consequence = typeof body.consequence === "number" && body.consequence >= 1 && body.consequence <= 5
+      ? body.consequence
+      : risk.consequence;
+    const owner = body.owner !== undefined
+      ? (typeof body.owner === "string" && body.owner.trim() ? body.owner.trim() : null)
+      : risk.owner;
+    const category = body.category !== undefined
+      ? (typeof body.category === "string" && body.category.trim() ? body.category.trim() : null)
+      : risk.category;
+
+    const issueLevel = getIssueLevel(consequence);
+    const issue = await prisma.issue.create({
+      data: {
+        organizationalUnitId: risk.organizationalUnitId,
+        issueName,
+        description,
+        consequence,
+        issueLevel,
+        owner,
+        category,
+        status: "control",
+        sourceRiskId: riskId,
+      },
+    });
+
+    await prisma.issueAuditLog.create({
+      data: {
+        issueId: issue.id,
+        entityType: "issue",
+        entityId: issue.id,
+        action: "created",
+        details: { createdFromRiskId: riskId },
+      },
+    });
+    await createAuditLog(riskId, "risk", riskId, "updated", {
+      issueCreatedFromRealizedRisk: { issueId: issue.id, issueName: issue.issueName },
+    });
+
+    res.status(201).json(issue);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create issue from risk" });
   }
 });
 
@@ -880,11 +969,11 @@ riskRoutes.patch("/:id", async (req, res) => {
     if (!existing) return res.status(404).json({ error: "Risk not found" });
 
     const newStatus = status !== undefined ? status : existing.status;
-    const statusChangingToClosedOrAccepted =
-      (newStatus === "closed" || newStatus === "accepted") && newStatus !== existing.status;
-    if (statusChangingToClosedOrAccepted && (typeof statusChangeRationale !== "string" || !statusChangeRationale.trim())) {
+    const statusChangingToClosedAcceptedOrRealized =
+      (newStatus === "closed" || newStatus === "accepted" || newStatus === "realized") && newStatus !== existing.status;
+    if (statusChangingToClosedAcceptedOrRealized && (typeof statusChangeRationale !== "string" || !statusChangeRationale.trim())) {
       return res.status(400).json({
-        error: "statusChangeRationale is required when setting status to Closed or Accepted",
+        error: "statusChangeRationale is required when setting status to Closed, Accepted, or Realized",
       });
     }
 
@@ -931,7 +1020,7 @@ riskRoutes.patch("/:id", async (req, res) => {
     await createRiskVersion(risk.id, risk, {
       likelihoodChangeReason: lChanged ? likelihoodChangeReason.trim() : null,
       consequenceChangeReason: cChanged ? consequenceChangeReason.trim() : null,
-      statusChangeRationale: statusChangingToClosedOrAccepted ? statusChangeRationale.trim() : null,
+      statusChangeRationale: statusChangingToClosedAcceptedOrRealized ? statusChangeRationale.trim() : null,
     });
 
     const changes: Record<string, AuditChange> = {};
@@ -948,7 +1037,7 @@ riskRoutes.patch("/:id", async (req, res) => {
       changes: Object.keys(changes).length > 0 ? changes : undefined,
       likelihoodChangeReason: lChanged && likelihoodChangeReason?.trim() ? likelihoodChangeReason.trim() : undefined,
       consequenceChangeReason: cChanged && consequenceChangeReason?.trim() ? consequenceChangeReason.trim() : undefined,
-      statusChangeRationale: statusChangingToClosedOrAccepted && statusChangeRationale?.trim() ? statusChangeRationale.trim() : undefined,
+      statusChangeRationale: statusChangingToClosedAcceptedOrRealized && statusChangeRationale?.trim() ? statusChangeRationale.trim() : undefined,
     });
 
     res.json(risk);

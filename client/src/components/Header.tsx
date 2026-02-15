@@ -1,6 +1,6 @@
 interface HeaderProps {
-  view: "risks" | "settings";
-  onViewChange: (view: "risks" | "settings") => void;
+  view: "risks" | "help" | "settings";
+  onViewChange: (view: "risks" | "help" | "settings") => void;
 }
 
 export function Header({ view, onViewChange }: HeaderProps) {
@@ -35,7 +35,10 @@ export function Header({ view, onViewChange }: HeaderProps) {
         </div>
         <nav style={{ display: "flex", gap: "0.5rem" }}>
           <button style={linkStyle(view === "risks")} onClick={() => onViewChange("risks")}>
-            Risks, Opp., & Issues
+            Risks, Issues, and Opportunities
+          </button>
+          <button style={linkStyle(view === "help")} onClick={() => onViewChange("help")}>
+            Help
           </button>
           <button style={linkStyle(view === "settings")} onClick={() => onViewChange("settings")}>
             Settings

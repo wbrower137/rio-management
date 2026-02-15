@@ -21,6 +21,7 @@ enum RiskStatus {
   mitigating
   accepted
   closed
+  realized
 }
 
 enum MitigationStrategy {
@@ -87,8 +88,71 @@ model OrganizationalUnit {
   children      OrganizationalUnit[] @relation("OrgUnitHierarchy")
   risks         Risk[]
   opportunities Opportunity[]
+  issues        Issue[]
 
   @@unique([legalEntityId, type, code])
+}
+
+enum IssueStatus {
+  ignore
+  control
+}
+
+model Issue {
+  id                   String     @id @default(uuid())
+  organizationalUnitId String
+  issueName            String
+  description          String?
+  consequence          Int        // 1-5 (likelihood fixed at 1 since it happened)
+  issueLevel           String?    // low, moderate, high (from top row of 5x5)
+  owner                String?
+  category             String?    // Category.code (Risk Categories)
+  status               IssueStatus @default(control)
+  sourceRiskId         String?    // When issue was created from a realized risk
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  organizationalUnit OrganizationalUnit  @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
+  sourceRisk           Risk?               @relation("IssueFromRisk", fields: [sourceRiskId], references: [id], onDelete: SetNull)
+  resolutionSteps     IssueResolutionStep[]
+  auditLogs           IssueAuditLog[]
+
+  @@index([organizationalUnitId])
+  @@index([sourceRiskId])
+}
+
+model IssueAuditLog {
+  id         String   @id @default(uuid())
+  issueId    String
+  entityType String   // "issue" | "resolution_step"
+  entityId   String
+  action     String   // "created" | "updated" | "deleted"
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+}
+
+model IssueResolutionStep {
+  id                    String    @id @default(uuid())
+  issueId               String
+  sequenceOrder         Int
+  plannedAction         String
+  estimatedStartDate    DateTime?
+  estimatedEndDate      DateTime?
+  expectedConsequence   Int       // 1-5 planned when step done
+  expectedIssueLevel    Int       // 8, 16, 20, 23, 25 for waterfall
+  actualConsequence     Int?
+  actualIssueLevel      Int?
+  actualCompletedAt     DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
 }
 
 model Opportunity {
@@ -202,6 +266,7 @@ model Risk {
   updatedAt             DateTime          @updatedAt
 
   organizationalUnit OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
+  issuesCreatedFromRisk Issue[]          @relation("IssueFromRisk") // Issues created when this risk was set to Realized
   versions             RiskVersion[]
   mitigationSteps      MitigationStep[]
   auditLogs             RiskAuditLog[]

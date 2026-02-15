@@ -220,12 +220,16 @@ export function OpportunityDetailView({ categories, opportunity, orgUnit, onBack
     { id: "audit", label: "Audit Log" },
   ];
 
+  const detailTheme = { bg: "#eff6ff", border: "#2563eb", badge: "#2563eb" }; // Opportunity: blue
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+    <div style={{ background: detailTheme.bg, borderLeft: "4px solid " + detailTheme.border, borderRadius: 8, padding: "1rem 1rem 1rem 1.25rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
         <button type="button" onClick={onBack} style={{ ...btnSecondary, padding: "0.4rem 0.75rem", fontSize: "0.875rem" }}>
           ← Back
         </button>
+        <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "0.25rem 0.5rem", borderRadius: 6, background: detailTheme.badge, color: "white" }}>
+          Opportunity
+        </span>
         <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}>{opportunity.opportunityName ?? "Opportunity"}</h2>
       </div>
 
