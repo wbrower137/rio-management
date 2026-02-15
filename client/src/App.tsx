@@ -11,11 +11,13 @@ import { OpportunityDetailView } from "./components/OpportunityDetailView";
 import { LegalEntityManager } from "./components/LegalEntityManager";
 import { OrgUnitManager } from "./components/OrgUnitManager";
 import { CategoryManager } from "./components/CategoryManager";
+import { LogoManager } from "./components/LogoManager";
 import { OpportunityCategoryManager } from "./components/OpportunityCategoryManager";
 import { OpportunityFilters, filterOpportunities, type OpportunityFiltersState } from "./components/OpportunityFilters";
 import { IssueFilters, filterIssues, type IssueFiltersState } from "./components/IssueFilters";
 import { IssueRegister } from "./components/IssueRegister";
 import { IssueMatrix } from "./components/IssueMatrix";
+import { HelpContent } from "./components/HelpContent";
 import { IssueDetailView } from "./components/IssueDetailView";
 import type { Category, Issue, LegalEntity, Opportunity, OpportunityCategory, OrganizationalUnit, Risk } from "./types";
 
@@ -43,6 +45,7 @@ export default function App() {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [opportunityCategories, setOpportunityCategories] = useState<OpportunityCategory[]>([]);
+  const [logoKey, setLogoKey] = useState(0);
 
   const refreshLegalEntities = useCallback(() => {
     fetch(`${API}/legal-entities`)
@@ -170,7 +173,7 @@ export default function App() {
 
   return (
     <>
-      <Header view={view} onViewChange={setView} />
+      <Header view={view} onViewChange={setView} logoKey={logoKey} />
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: "1.5rem 1rem" }}>
         {view === "risks" && (
           <>
@@ -366,17 +369,11 @@ export default function App() {
           </>
         )}
 
-        {view === "help" && (
-          <section style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "2rem", maxWidth: 720 }}>
-            <h2 style={{ margin: "0 0 1rem", fontSize: "1.25rem", fontWeight: 600 }}>Help</h2>
-            <p style={{ margin: 0, color: "#374151", fontSize: "1rem", lineHeight: 1.6 }}>
-              We're working on documentation for this application.
-            </p>
-          </section>
-        )}
+        {view === "help" && <HelpContent />}
 
         {view === "settings" && (
           <section style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <LogoManager onLogoUploaded={() => setLogoKey((k) => k + 1)} />
             <LegalEntityManager onUpdate={refreshLegalEntities} />
             <OrgUnitManager legalEntities={legalEntities} onUpdate={refreshLegalEntities} />
             <div style={{ display: "flex", flexDirection: "row", gap: "1.5rem", flexWrap: "wrap" }}>
