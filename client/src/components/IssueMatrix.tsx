@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Category, Issue, OrganizationalUnit } from "../types";
+import { exportElementAsPng } from "../utils/exportPng";
 
 const CONSEQUENCE_LABELS = ["1: Minimal", "2: Minor", "3: Moderate", "4: Significant", "5: Severe"];
 
@@ -22,10 +23,10 @@ interface IssueMatrixProps {
   orgUnit: OrganizationalUnit;
   issues: Issue[];
   onSelectIssue?: (id: string) => void;
+  onExportRef?: (el: HTMLDivElement | null) => void;
 }
 
-export function IssueMatrix({ categories, orgUnit, issues, onSelectIssue }: IssueMatrixProps) {
-  const categoryLabelMap: Record<string, string> = Object.fromEntries(categories.map((c) => [c.code, c.label]));
+export function IssueMatrix({ categories: _categories, orgUnit, issues, onSelectIssue, onExportRef }: IssueMatrixProps) {
   const [showOLNumbers, setShowOLNumbers] = useState(false);
 
   // Group issues by consequence (1-5)
@@ -50,18 +51,39 @@ export function IssueMatrix({ categories, orgUnit, issues, onSelectIssue }: Issu
 
   const cellSize = 100;
   const padding = { top: 16, left: 12 };
-  const labelHeight = 28;
+
+  const exportRef = useRef<HTMLDivElement>(null);
+  const handleExportPng = async () => {
+    if (!exportRef.current) return;
+    const safe = (orgUnit?.name ?? "export").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    await exportElementAsPng(exportRef.current, `Issue-Matrix-${safe}.png`);
+  };
 
   return (
-    <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem", overflow: "auto" }}>
+    <div
+      ref={(el) => {
+        (exportRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        onExportRef?.(el ?? null);
+      }}
+      style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem", overflow: "auto" }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
           Issue Matrix (1×5) — {orgUnit.type} {orgUnit.name}
         </h3>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", cursor: "pointer" }}>
-          <input type="checkbox" checked={showOLNumbers} onChange={(e) => setShowOLNumbers(e.target.checked)} />
-          Show level (8, 16, 20, 23, 25)
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <button
+            onClick={handleExportPng}
+            style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+            title="Export as PNG (16:9)"
+          >
+            Export PNG
+          </button>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", cursor: "pointer" }}>
+            <input type="checkbox" checked={showOLNumbers} onChange={(e) => setShowOLNumbers(e.target.checked)} />
+            Show level (8, 16, 20, 23, 25)
+          </label>
+        </div>
       </div>
 
       <div style={{ marginLeft: padding.left, marginTop: padding.top }}>

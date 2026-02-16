@@ -19,7 +19,9 @@ import { IssueRegister } from "./components/IssueRegister";
 import { IssueMatrix } from "./components/IssueMatrix";
 import { HelpContent } from "./components/HelpContent";
 import { IssueDetailView } from "./components/IssueDetailView";
+import { ReportChartCapture } from "./components/ReportChartCapture";
 import type { Category, Issue, LegalEntity, Opportunity, OpportunityCategory, OrganizationalUnit, Risk } from "./types";
+import { generateRIOPowerPointReport, downloadPptx } from "./utils/pptxReport";
 
 const API = "/api";
 
@@ -46,13 +48,52 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [opportunityCategories, setOpportunityCategories] = useState<OpportunityCategory[]>([]);
   const [logoKey, setLogoKey] = useState(0);
+  const [pptxGenerating, setPptxGenerating] = useState(false);
+  const [capturingCharts, setCapturingCharts] = useState(false);
+
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  const safeOpportunityCategories = Array.isArray(opportunityCategories) ? opportunityCategories : [];
+
+  const handleCaptureComplete = useCallback(
+    async (images: { riskMatrix?: string; issueMatrix?: string; oppMatrix?: string }) => {
+      if (!selectedLegalEntity || !selectedOrgUnit) return;
+      try {
+        const blob = await generateRIOPowerPointReport({
+          entityName: selectedLegalEntity.name ?? "Entity",
+          orgUnitName: selectedOrgUnit.name ?? "PPD",
+          orgUnitType: selectedOrgUnit.type === "program" ? "Program" : selectedOrgUnit.type === "project" ? "Project" : "Department",
+          risks,
+          issues,
+          opportunities,
+          categories: safeCategories,
+          opportunityCategories: safeOpportunityCategories,
+          images,
+        });
+        const safe = (selectedOrgUnit.name ?? "report").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+        downloadPptx(blob, `RIO-Report-${safe}.pptx`);
+      } catch (e) {
+        console.error("Failed to generate PowerPoint:", e);
+        alert(`Failed to generate PowerPoint: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setPptxGenerating(false);
+        setCapturingCharts(false);
+      }
+    },
+    [selectedLegalEntity, selectedOrgUnit, risks, issues, opportunities, safeCategories, safeOpportunityCategories]
+  );
+
+  const handleGeneratePowerPoint = () => {
+    if (!selectedLegalEntity || !selectedOrgUnit) return;
+    setPptxGenerating(true);
+    setCapturingCharts(true);
+  };
 
   const refreshLegalEntities = useCallback(() => {
     fetch(`${API}/legal-entities`)
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setLegalEntities(Array.isArray(data) ? data : []))
       .catch((e) => {
-        console.error("Failed to load legal entities:", e);
+        console.error("Failed to load entities:", e);
         setLegalEntities([]);
       });
   }, []);
@@ -168,8 +209,6 @@ export default function App() {
   const selectedRisk = selectedRiskId ? risks.find((r) => r.id === selectedRiskId) : null;
   const selectedOpportunity = selectedOpportunityId ? opportunities.find((o) => o.id === selectedOpportunityId) : null;
   const selectedIssue = selectedIssueId ? issues.find((i) => i.id === selectedIssueId) : null;
-  const safeCategories = Array.isArray(categories) ? categories : [];
-  const safeOpportunityCategories = Array.isArray(opportunityCategories) ? opportunityCategories : [];
 
   return (
     <>
@@ -178,18 +217,51 @@ export default function App() {
         {view === "risks" && (
           <>
             <section style={{ marginBottom: "1.5rem" }}>
-              <h2 style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "0.5rem" }}>
-                Scope
-              </h2>
-              <OrgUnitSelector
-                legalEntities={legalEntities}
-                selectedLegalEntity={selectedLegalEntity}
-                selectedOrgUnit={selectedOrgUnit}
-                onSelectLegalEntity={handleSelectLegalEntity}
-                onSelectOrgUnit={handleSelectOrgUnit}
-              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.75rem" }}>
+                <div>
+                  <h2 style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "0.5rem" }}>
+                    Scope
+                  </h2>
+                  <OrgUnitSelector
+                    legalEntities={legalEntities}
+                    selectedLegalEntity={selectedLegalEntity}
+                    selectedOrgUnit={selectedOrgUnit}
+                    onSelectLegalEntity={handleSelectLegalEntity}
+                    onSelectOrgUnit={handleSelectOrgUnit}
+                  />
+                </div>
+                {selectedLegalEntity && selectedOrgUnit && (
+                  <button
+                    onClick={handleGeneratePowerPoint}
+                    disabled={pptxGenerating}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      background: pptxGenerating ? "#9ca3af" : "#156082",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: pptxGenerating ? "wait" : "pointer",
+                      fontSize: "0.875rem",
+                    }}
+                    title="Generate PowerPoint report (Entity + PPD)"
+                  >
+                    {pptxGenerating ? "Generating…" : "Generate PowerPoint Report"}
+                  </button>
+                )}
+              </div>
             </section>
 
+            {capturingCharts && selectedOrgUnit && (
+              <ReportChartCapture
+                orgUnit={selectedOrgUnit}
+                risks={risks}
+                issues={issues}
+                opportunities={opportunities}
+                categories={safeCategories}
+                opportunityCategories={safeOpportunityCategories}
+                onCaptureComplete={handleCaptureComplete}
+              />
+            )}
             {selectedOrgUnit && (
               <>
                 {!selectedRisk && !selectedOpportunity && !selectedIssue && (mainTab === "risk_register" || mainTab === "risk_matrix") && (

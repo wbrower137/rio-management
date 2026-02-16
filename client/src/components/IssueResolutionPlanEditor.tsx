@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Issue, IssueResolutionStep } from "../types";
+import type { IssueResolutionStep } from "../types";
 
 const API = "/api";
 

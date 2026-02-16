@@ -1,5 +1,5 @@
 // DoD RIO Management Tool - Database Schema
-// Legal Entity → Organizational Units (Program/Project/Department) → RIOs
+// Entity → Organizational Units (Program/Project/Department) → RIOs
 
 generator client {
   provider = "prisma-client-js"

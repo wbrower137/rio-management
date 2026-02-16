@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Category, OrganizationalUnit, Risk } from "../types";
+import { exportElementAsPng } from "../utils/exportPng";
 
 interface RiskMatrixProps {
   categories: Category[];
   orgUnit: OrganizationalUnit;
   risks: Risk[];
   onSelectRisk?: (riskId: string) => void;
+  /** Callback to get the exportable element for report capture */
+  onExportRef?: (el: HTMLDivElement | null) => void;
 }
 
 const LIKELIHOOD_LABELS = ["1: Not Likely", "2: Low Likely", "3: Likely", "4: High Likely", "5: Near Certain"];
@@ -127,7 +130,7 @@ function getTrend(r: Risk): Trend {
   return "unchanged";
 }
 
-export function RiskMatrix({ categories, orgUnit: _orgUnit, risks, onSelectRisk }: RiskMatrixProps) {
+export function RiskMatrix({ categories, orgUnit, risks, onSelectRisk, onExportRef }: RiskMatrixProps) {
   const categoryLabelMap: Record<string, string> = Object.fromEntries(categories.map((c) => [c.code, c.label]));
   const [showRLNumbers, setShowRLNumbers] = useState(true);
   const [showOriginalLevel, setShowOriginalLevel] = useState(false);
@@ -180,11 +183,33 @@ export function RiskMatrix({ categories, orgUnit: _orgUnit, risks, onSelectRisk 
   // Risks sorted by RL descending (highest first)
   const risksSortedByRL = [...risks].sort((a, b) => getNumericalRL(b.likelihood, b.consequence) - getNumericalRL(a.likelihood, a.consequence));
 
+  const exportRef = useRef<HTMLDivElement>(null);
+  const handleExportPng = async () => {
+    if (!exportRef.current) return;
+    const safe = (orgUnit?.name ?? "export").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    await exportElementAsPng(exportRef.current, `Risk-Matrix-${safe}.png`);
+  };
+
   return (
-    <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
-      <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>
-        5×5 Risk Matrix — DoD MIL-STD-882
-      </h3>
+    <div
+      ref={(el) => {
+        (exportRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        onExportRef?.(el ?? null);
+      }}
+      style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
+          5×5 Risk Matrix — DoD MIL-STD-882
+        </h3>
+        <button
+          onClick={handleExportPng}
+          style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+          title="Export as PNG (16:9)"
+        >
+          Export PNG
+        </button>
+      </div>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <div style={{ overflowX: "auto" }}>

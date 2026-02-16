@@ -35,7 +35,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
     fetch(`${API}/legal-entities`)
       .then((r) => r.json())
       .then(setEntities)
-      .catch((e) => console.error("Failed to load legal entities:", e))
+      .catch((e) => console.error("Failed to load entities:", e))
       .finally(() => setLoading(false));
   };
 
@@ -55,7 +55,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
         load();
         onUpdate?.();
       })
-      .catch((e) => console.error("Failed to add legal entity:", e));
+      .catch((e) => console.error("Failed to add entity:", e));
   };
 
   const handleEdit = (e: React.FormEvent) => {
@@ -73,7 +73,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
         load();
         onUpdate?.();
       })
-      .catch((e) => console.error("Failed to update legal entity:", e));
+      .catch((e) => console.error("Failed to update entity:", e));
   };
 
   const handleDelete = () => {
@@ -84,7 +84,7 @@ export function LegalEntityManager({ onUpdate }: { onUpdate?: () => void }) {
         load();
         onUpdate?.();
       })
-      .catch((e) => console.error("Failed to delete legal entity:", e));
+      .catch((e) => console.error("Failed to delete entity:", e));
   };
 
   const startEdit = (entity: LegalEntity) => {

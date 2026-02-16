@@ -11,7 +11,6 @@ interface LogoManagerProps {
 
 const btnPrimary = { padding: "0.5rem 1rem", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer" as const };
 const btnSecondary = { ...btnPrimary, background: "#6b7280" };
-const labelStyle = { display: "block" as const, fontSize: "0.75rem", marginBottom: "0.25rem" };
 
 export function LogoManager({ onLogoUploaded }: LogoManagerProps) {
   const [uploading, setUploading] = useState(false);

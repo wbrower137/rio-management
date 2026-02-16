@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Category, OrganizationalUnit, Risk, RiskCategory } from "../types";
+import { exportElementAsPng } from "../utils/exportPng";
 import { MitigationStepsEditor } from "./MitigationStepsEditor";
 
 const API = "/api";
@@ -216,19 +217,35 @@ export function RiskRegister({ categories, orgUnit, risks, loading, onUpdate, on
   };
 
   const cancelEdit = () => setEditing(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPng = async () => {
+    if (!exportRef.current) return;
+    const safe = (orgUnit.name ?? "export").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    await exportElementAsPng(exportRef.current, `Risk-Register-${safe}.png`);
+  };
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+    <div ref={exportRef}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
         <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}>
           Risk Register — {typeLabel[orgUnit.type]} {orgUnit.name}
         </h2>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          style={btnPrimary}
-        >
-          {showAddForm ? "Cancel" : "+ Add Risk"}
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            onClick={handleExportPng}
+            style={{ ...btnPrimary, background: "#6b7280" }}
+            title="Export as PNG (16:9)"
+          >
+            Export PNG
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={btnPrimary}
+          >
+            {showAddForm ? "Cancel" : "+ Add Risk"}
+          </button>
+        </div>
       </div>
 
       {showAddForm && (

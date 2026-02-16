@@ -12,7 +12,7 @@ legalEntityRoutes.get("/", async (_req, res) => {
     res.json(entities);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch legal entities" });
+    res.status(500).json({ error: "Failed to fetch entities" });
   }
 });
 
@@ -22,11 +22,11 @@ legalEntityRoutes.get("/:id", async (req, res) => {
       where: { id: req.params.id },
       include: { organizationalUnits: { orderBy: { name: "asc" } } },
     });
-    if (!entity) return res.status(404).json({ error: "Legal entity not found" });
+    if (!entity) return res.status(404).json({ error: "Entity not found" });
     res.json(entity);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch legal entity" });
+    res.status(500).json({ error: "Failed to fetch entity" });
   }
 });
 
@@ -50,7 +50,7 @@ legalEntityRoutes.post("/", async (req, res) => {
     res.status(201).json(entity);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to create legal entity" });
+    res.status(500).json({ error: "Failed to create entity" });
   }
 });
 
@@ -73,7 +73,7 @@ legalEntityRoutes.patch("/:id", async (req, res) => {
     res.json(entity);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to update legal entity" });
+    res.status(500).json({ error: "Failed to update entity" });
   }
 });
 
@@ -83,6 +83,6 @@ legalEntityRoutes.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to delete legal entity" });
+    res.status(500).json({ error: "Failed to delete entity" });
   }
 });

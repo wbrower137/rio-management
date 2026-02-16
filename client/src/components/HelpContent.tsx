@@ -1,5 +1,4 @@
 export function HelpContent() {
-  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   const h2 = { margin: "1.75rem 0 0.75rem", fontSize: "1.125rem", fontWeight: 600, color: "#1e293b" };
   const h3 = { margin: "1.25rem 0 0.5rem", fontSize: "1rem", fontWeight: 600, color: "#334155" };
   const p = { margin: "0.5rem 0", fontSize: "0.9375rem", lineHeight: 1.65, color: "#475569" };
@@ -23,7 +22,7 @@ export function HelpContent() {
         RIO Management helps you track <strong style={strong}>Risks</strong>, <strong style={strong}>Issues</strong>, and <strong style={strong}>Opportunities</strong> for your programs, projects, and departments. The top navigation lets you switch between the main area (Risks, Issues, and Opportunities) and Help.
       </p>
       <p style={p}>
-        Before you can work with data, you must select your <strong style={strong}>scope</strong>: a Legal Entity and then a Program, Project, or Department (PPD). All records you view and edit are scoped to that PPD.
+        Before you can work with data, you must select your <strong style={strong}>scope</strong>: an Entity and then a Program, Project, or Department (PPD). All records you view and edit are scoped to that PPD.
       </p>
 
       <h2 id="scope" style={h2}>2. Selecting Your Scope</h2>
@@ -31,7 +30,7 @@ export function HelpContent() {
         At the top of the main area, use the <strong style={strong}>Scope</strong> section:
       </p>
       <ul style={ul}>
-        <li style={li}>Choose a <strong style={strong}>Legal Entity</strong> from the dropdown.</li>
+        <li style={li}>Choose an <strong style={strong}>Entity</strong> from the dropdown.</li>
         <li style={li}>Then choose a <strong style={strong}>Program</strong>, <strong style={strong}>Project</strong>, or <strong style={strong}>Department</strong>.</li>
       </ul>
       <p style={p}>

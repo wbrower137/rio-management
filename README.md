@@ -5,12 +5,12 @@ DoD RIO (Risk, Issue, and Opportunity) Management Tool — based on the DoD RIO 
 ## Hierarchy
 
 ```
-Legal Entity (Company A, B, ...)
+Entity (Company A, B, ...)
   └── Programs, Projects, Departments
         └── Risks, Issues, Opportunities (isolated per org unit)
 ```
 
-Each Program, Project, and Department has its own isolated RIO set. Permissions (future) will control who can view/edit each org unit or legal entity.
+Each Program, Project, and Department has its own isolated RIO set. Permissions (future) will control who can view/edit each org unit or entity.
 
 ## Tech Stack
 
@@ -82,7 +82,7 @@ Each Program, Project, and Department has its own isolated RIO set. Permissions 
 
 ## API
 
-- `GET /api/legal-entities` — List legal entities
+- `GET /api/legal-entities` — List entities
 - `GET /api/organizational-units?legalEntityId=...` — List org units
 - `GET /api/risks?organizationalUnitId=...` — List risks (scoped by org unit)
 - `POST /api/risks` — Create risk (requires `organizationalUnitId`)

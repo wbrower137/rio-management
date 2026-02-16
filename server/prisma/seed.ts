@@ -16,7 +16,7 @@ async function main() {
     create: {
       name: "Company A",
       code: "COMPANY-A",
-      description: "Primary legal entity",
+      description: "Primary entity",
     },
   });
 
@@ -26,7 +26,7 @@ async function main() {
     create: {
       name: "Company B",
       code: "COMPANY-B",
-      description: "Secondary legal entity",
+      description: "Secondary entity",
     },
   });
 
@@ -554,7 +554,7 @@ async function main() {
   }
 
   console.log("Seed completed:");
-  console.log("  Legal entities:", companyA.name, companyB.name);
+  console.log("  Entities:", companyA.name, companyB.name);
   console.log("  Org units: Program Alpha, Project X, Engineering, Program Bravo, Operations");
   console.log("  Company B Program Bravo: 5 risks (4 with mitigation plans, 1 without)");
   console.log("  Company B Operations: 8 risks (1 with 7 steps, 3 with 4 steps, 4 without)");

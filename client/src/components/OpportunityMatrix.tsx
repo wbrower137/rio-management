@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Opportunity, OpportunityCategory, OrganizationalUnit } from "../types";
+import { exportElementAsPng } from "../utils/exportPng";
 
 interface OpportunityMatrixProps {
   categories: OpportunityCategory[];
   orgUnit: OrganizationalUnit;
   opportunities: Opportunity[];
   onSelectOpportunity?: (id: string) => void;
+  onExportRef?: (el: HTMLDivElement | null) => void;
 }
 
 const LIKELIHOOD_LABELS = ["1: Not Likely", "2: Low Likely", "3: Likely", "4: High Likely", "5: Near Certain"];
@@ -125,8 +127,8 @@ function getTrend(o: Opportunity): Trend {
   return "unchanged";
 }
 
-export function OpportunityMatrix({ categories, orgUnit: _orgUnit, opportunities, onSelectOpportunity }: OpportunityMatrixProps) {
-  useEffect(() => { console.log("[OpportunityMatrix] mount", { orgUnitId: _orgUnit?.id, opportunitiesCount: opportunities?.length }); }, [_orgUnit?.id, opportunities?.length]);
+export function OpportunityMatrix({ categories, orgUnit, opportunities, onSelectOpportunity, onExportRef }: OpportunityMatrixProps) {
+  useEffect(() => { console.log("[OpportunityMatrix] mount", { orgUnitId: orgUnit?.id, opportunitiesCount: opportunities?.length }); }, [orgUnit?.id, opportunities?.length]);
   const categoryLabelMap: Record<string, string> = Object.fromEntries(categories.map((c) => [c.code, c.label]));
   const [showOLNumbers, setShowOLNumbers] = useState(true);
   const [showOriginalLevel, setShowOriginalLevel] = useState(false);
@@ -175,11 +177,33 @@ export function OpportunityMatrix({ categories, orgUnit: _orgUnit, opportunities
 
   const opportunitiesSortedByOL = [...opportunities].sort((a, b) => getNumericalOL(b.likelihood, b.impact) - getNumericalOL(a.likelihood, a.impact));
 
+  const exportRef = useRef<HTMLDivElement>(null);
+  const handleExportPng = async () => {
+    if (!exportRef.current) return;
+    const safe = (orgUnit?.name ?? "export").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    await exportElementAsPng(exportRef.current, `Opportunity-Matrix-${safe}.png`);
+  };
+
   return (
-    <div style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
-      <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>
-        5×5 Opportunity Matrix
-      </h3>
+    <div
+      ref={(el) => {
+        (exportRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        onExportRef?.(el ?? null);
+      }}
+      style={{ background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
+          5×5 Opportunity Matrix
+        </h3>
+        <button
+          onClick={handleExportPng}
+          style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+          title="Export as PNG (16:9)"
+        >
+          Export PNG
+        </button>
+      </div>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <div style={{ overflowX: "auto" }}>

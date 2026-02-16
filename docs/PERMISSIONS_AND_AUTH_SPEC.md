@@ -37,7 +37,7 @@
 
 ### 2.1 Scope
 
-- **Permission boundary:** Legal Entity (LE) + Program/Project/Department (PPD)
+- **Permission boundary:** Entity (LE) + Program/Project/Department (PPD)
 - Permissions are granted per **LE/PPD combination**.
 - There is **no org hierarchy** for permissions: an LE does not implicitly grant access to its PPDs.
 
@@ -53,7 +53,7 @@
 
 | Capability | Admin | Editor | Viewer |
 |------------|:-----:|:------:|:------:|
-| Manage Legal Entities | ✅ | ❌ | ❌ |
+| Manage Entities | ✅ | ❌ | ❌ |
 | Manage Programs / Projects / Departments | ✅ | ❌ | ❌ |
 | Manage Risk Categories | ✅ | ❌ | ❌ |
 | Manage Opportunity Categories | ✅ | ❌ | ❌ |

@@ -3,7 +3,7 @@
  *
  * Prerequisites:
  *   - Server: npm run dev:server (or start server) so API is at http://localhost:3001
- *   - DB seeded so there is at least one legal entity and one org unit
+ *   - DB seeded so there is at least one entity and one org unit
  *
  * Run: node server/scripts/test-risk-versioning.mjs
  *   (from repo root) or: node scripts/test-risk-versioning.mjs (from server/)
@@ -50,7 +50,7 @@ async function main() {
   // Resolve org unit id
   const entities = await get("/legal-entities");
   if (!entities.length) {
-    console.log("FAIL: No legal entities. Run db:seed.");
+    console.log("FAIL: No entities. Run db:seed.");
     process.exit(1);
   }
   const units = await get(`/organizational-units?legalEntityId=${entities[0].id}`);
