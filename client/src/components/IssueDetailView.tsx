@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { Category, Issue, OrganizationalUnit } from "../types";
+import { exportElementAsPngCropped } from "../utils/exportPng";
 import { IssueResolutionPlanEditor } from "./IssueResolutionPlanEditor";
 import { IssueWaterfall } from "./IssueWaterfall";
 
@@ -98,6 +99,8 @@ export function IssueDetailView({ categories, issue, orgUnit, onBack, onUpdate, 
   const [auditLogLoading, setAuditLogLoading] = useState(false);
   const [auditLogError, setAuditLogError] = useState<string | null>(null);
   const [fullIssue, setFullIssue] = useState<Issue | null>(null);
+  const resolutionPlanTabRef = useRef<HTMLDivElement | null>(null);
+  const waterfallTabRef = useRef<HTMLDivElement | null>(null);
   const displayIssue = fullIssue ?? issue;
   useEffect(() => {
     fetch(`${API}/issues/${issue.id}`)
@@ -293,14 +296,26 @@ export function IssueDetailView({ categories, issue, orgUnit, onBack, onUpdate, 
         )}
 
         {tab === "resolution_plan" && (
-          <IssueResolutionPlanEditor
-            issueId={issue.id}
-            issue={issue}
-            onUpdate={() => {
-              onUpdate();
-              loadAuditLog();
-            }}
-          />
+          <div ref={resolutionPlanTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => resolutionPlanTabRef.current && exportElementAsPngCropped(resolutionPlanTabRef.current, `Issue-Resolution-Plan-${(issue.issueName ?? "issue").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 35)}.png`)}
+                style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+                title="Export as PNG (cropped to content)"
+              >
+                Export PNG
+              </button>
+            </div>
+            <IssueResolutionPlanEditor
+              issueId={issue.id}
+              issue={issue}
+              onUpdate={() => {
+                onUpdate();
+                loadAuditLog();
+              }}
+            />
+          </div>
         )}
 
         {tab === "audit" && (
@@ -389,7 +404,19 @@ export function IssueDetailView({ categories, issue, orgUnit, onBack, onUpdate, 
         )}
 
         {tab === "waterfall" && (
-          <IssueWaterfall orgUnit={orgUnit} issues={[issue]} preselectedIssueId={issue.id} />
+          <div ref={waterfallTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => waterfallTabRef.current && exportElementAsPngCropped(waterfallTabRef.current, `Issue-Waterfall-${(issue.issueName ?? "issue").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 35)}.png`)}
+                style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+                title="Export as PNG (cropped to content)"
+              >
+                Export PNG
+              </button>
+            </div>
+            <IssueWaterfall orgUnit={orgUnit} issues={[issue]} preselectedIssueId={issue.id} />
+          </div>
         )}
       </div>
     </div>

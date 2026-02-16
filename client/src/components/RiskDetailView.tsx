@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { Category, MitigationStep, OrganizationalUnit, Risk, RiskCategory } from "../types";
+import { exportElementAsPngCropped } from "../utils/exportPng";
 import { MitigationStepsEditor } from "./MitigationStepsEditor";
 import { RiskMitigationMatrix } from "./RiskMitigationMatrix";
 import { RiskWaterfall } from "./RiskWaterfall";
@@ -118,6 +119,8 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate, on
   const [mitigationSteps, setMitigationSteps] = useState<MitigationStep[] | null>(null);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const mitigationTabRef = useRef<HTMLDivElement | null>(null);
+  const waterfallTabRef = useRef<HTMLDivElement | null>(null);
   const [auditLogError, setAuditLogError] = useState<string | null>(null);
   /** Full risk from API (includes linkedIssue when status is Realized). */
   const [fullRisk, setFullRisk] = useState<Risk | null>(null);
@@ -245,6 +248,7 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate, on
       .then(() => {
         setEditing(false);
         onUpdate();
+        loadFullRisk();
         loadAuditLog();
       })
       .catch((e) => console.error("Failed to update risk:", e));
@@ -534,7 +538,18 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate, on
       )}
 
       {tab === "mitigation" && (
-        <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div ref={mitigationTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => mitigationTabRef.current && exportElementAsPngCropped(mitigationTabRef.current, `Risk-Mitigation-${(risk.riskName ?? "risk").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}.png`)}
+              style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+              title="Export as PNG (cropped to content)"
+            >
+              Export PNG
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ flexShrink: 0, minWidth: 380, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <RiskMitigationMatrix
                 risk={risk}
@@ -552,11 +567,24 @@ export function RiskDetailView({ categories, risk, orgUnit, onBack, onUpdate, on
                 onStepsChange={(steps) => setMitigationSteps(steps)}
               />
             </div>
+          </div>
         </div>
       )}
 
       {tab === "waterfall" && (
-        <RiskWaterfall orgUnit={orgUnit} risks={[risk]} preselectedRiskId={risk.id} />
+        <div ref={waterfallTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => waterfallTabRef.current && exportElementAsPngCropped(waterfallTabRef.current, `Risk-Waterfall-${(risk.riskName ?? "risk").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}.png`)}
+              style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+              title="Export as PNG (cropped to content)"
+            >
+              Export PNG
+            </button>
+          </div>
+          <RiskWaterfall orgUnit={orgUnit} risks={[risk]} preselectedRiskId={risk.id} />
+        </div>
       )}
 
       {tab === "audit" && (

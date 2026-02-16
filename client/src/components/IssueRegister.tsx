@@ -328,26 +328,48 @@ export function IssueRegister({ categories = [], orgUnit, issues = [], loading, 
                   </tr>
                 ) : (
                   <tr key={i.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: "0.75rem 1rem" }}>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", maxWidth: 280 }} title={i.description ?? undefined}>
                       <button
                         type="button"
                         onClick={() => (onSelectIssue ? onSelectIssue(i.id) : startEdit(i))}
-                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "#2563eb", textDecoration: "underline", fontSize: "inherit" }}
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", textDecoration: "underline" }}
                       >
-                        {i.issueName}
+                        <strong>{(() => {
+                          const n = i.issueName ?? "";
+                          return `${n.slice(0, 60)}${n.length > 60 ? "…" : ""}`;
+                        })()}</strong>
                       </button>
+                      {i.description && (
+                        <div style={{ fontSize: "0.75rem", marginTop: "0.2rem", color: "#6b7280" }}>
+                          {`${i.description.slice(0, 50)}${i.description.length > 50 ? "…" : ""}`}
+                        </div>
+                      )}
                     </td>
-                    <td style={{ padding: "0.75rem 1rem" }}>{categoryOptions.find((c) => c.value === i.category)?.label ?? i.category ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem", textAlign: "center" }}>{i.consequence}</td>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>
+                      {categoryOptions.find((c) => c.value === i.category)?.label ?? i.category ?? "—"}
+                    </td>
+                    <td style={{ padding: "0.75rem 1rem", textAlign: "center", fontSize: "0.875rem" }}>{i.consequence}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
-                      <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 4, background: `${getLevelColor(getNumericalIssueLevel(i.consequence))}33`, color: "#374151", fontSize: "0.75rem" }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "0.2rem 0.5rem",
+                          borderRadius: 4,
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          background: getLevelColor(getNumericalIssueLevel(i.consequence)) + "22",
+                          color: getLevelColor(getNumericalIssueLevel(i.consequence)),
+                        }}
+                      >
                         {["Minimal", "Minor", "Moderate", "Significant", "Severe"][Math.max(0, Math.min(4, i.consequence - 1))]}
                       </span>
                     </td>
-                    <td style={{ padding: "0.75rem 1rem" }}>{STATUS_LABELS[i.status ?? "control"]}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}>{i.owner ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.75rem", color: "#6b7280" }}>
-                      {new Date(i.lastUpdated ?? i.updatedAt).toLocaleDateString()}
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem" }}>{STATUS_LABELS[i.status ?? "control"]}</td>
+                    <td style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#6b7280" }}>{i.owner ?? "—"}</td>
+                    <td style={{ padding: "0.75rem 1rem", textAlign: "right", fontSize: "0.8125rem", color: "#6b7280" }}>
+                      {(i.lastUpdated ?? i.updatedAt)
+                        ? new Date(i.lastUpdated ?? i.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                        : "—"}
                     </td>
                   </tr>
                 )

@@ -106,3 +106,15 @@ export async function exportElementAsPng(element: HTMLElement, filename: string)
   link.href = dataUrl;
   link.click();
 }
+
+/**
+ * Captures a DOM element, crops to content bounds, and triggers download.
+ * Use for charts/tabs where content is a subset of the element (minimal white space).
+ */
+export async function exportElementAsPngCropped(element: HTMLElement, filename: string): Promise<void> {
+  const dataUrl = await captureElementAsPngDataUrlCropped(element);
+  const link = document.createElement("a");
+  link.download = filename.endsWith(".png") ? filename : `${filename}.png`;
+  link.href = dataUrl;
+  link.click();
+}

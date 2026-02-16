@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { Opportunity, OpportunityActionPlanStep, OpportunityCategory, OrganizationalUnit } from "../types";
+import { exportElementAsPngCropped } from "../utils/exportPng";
 import { OpportunityActionPlanEditor } from "./OpportunityActionPlanEditor";
 import { OpportunityActionPlanMatrix } from "./OpportunityActionPlanMatrix";
 import { OpportunityWaterfall } from "./OpportunityWaterfall";
@@ -89,6 +90,8 @@ export function OpportunityDetailView({ categories, opportunity, orgUnit, onBack
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [auditLogLoading, setAuditLogLoading] = useState(false);
   const [auditLogError, setAuditLogError] = useState<string | null>(null);
+  const actionPlanTabRef = useRef<HTMLDivElement | null>(null);
+  const waterfallTabRef = useRef<HTMLDivElement | null>(null);
 
   const loadActionPlanSteps = () => {
     fetch(`${API}/opportunities/${opportunity.id}/action-plan-steps`)
@@ -422,28 +425,52 @@ export function OpportunityDetailView({ categories, opportunity, orgUnit, onBack
       )}
 
       {tab === "action_plan" && (
-        <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flexShrink: 0, minWidth: 380, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <OpportunityActionPlanMatrix
-              opportunity={opportunity}
-              steps={actionPlanSteps}
-              showOriginalLxI={showOriginalLxI}
-              onShowOriginalLxIChange={setShowOriginalLxI}
-            />
+        <div ref={actionPlanTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => actionPlanTabRef.current && exportElementAsPngCropped(actionPlanTabRef.current, `Opportunity-Action-Plan-${(opportunity.opportunityName ?? "opp").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 35)}.png`)}
+              style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+              title="Export as PNG (cropped to content)"
+            >
+              Export PNG
+            </button>
           </div>
-          <div style={{ flex: 1, minWidth: 320, background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
-            <OpportunityActionPlanEditor
-              opportunityId={opportunity.id}
-              opportunity={{ originalLikelihood: opportunity.originalLikelihood ?? opportunity.likelihood, originalImpact: opportunity.originalImpact ?? opportunity.impact, likelihood: opportunity.likelihood, impact: opportunity.impact }}
-              onUpdate={() => { onUpdate(); loadActionPlanSteps(); loadAuditLog(); }}
-              onStepsChange={(steps) => setActionPlanSteps(steps)}
-            />
+          <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flexShrink: 0, minWidth: 380, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <OpportunityActionPlanMatrix
+                opportunity={opportunity}
+                steps={actionPlanSteps}
+                showOriginalLxI={showOriginalLxI}
+                onShowOriginalLxIChange={setShowOriginalLxI}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 320, background: "white", borderRadius: 8, border: "1px solid #e5e7eb", padding: "1rem" }}>
+              <OpportunityActionPlanEditor
+                opportunityId={opportunity.id}
+                opportunity={{ originalLikelihood: opportunity.originalLikelihood ?? opportunity.likelihood, originalImpact: opportunity.originalImpact ?? opportunity.impact, likelihood: opportunity.likelihood, impact: opportunity.impact }}
+                onUpdate={() => { onUpdate(); loadActionPlanSteps(); loadAuditLog(); }}
+                onStepsChange={(steps) => setActionPlanSteps(steps)}
+              />
+            </div>
           </div>
         </div>
       )}
 
       {tab === "waterfall" && (
-        <OpportunityWaterfall orgUnit={orgUnit} opportunities={[opportunity]} preselectedOpportunityId={opportunity.id} />
+        <div ref={waterfallTabRef} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => waterfallTabRef.current && exportElementAsPngCropped(waterfallTabRef.current, `Opportunity-Waterfall-${(opportunity.opportunityName ?? "opp").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 35)}.png`)}
+              style={{ padding: "0.5rem 1rem", background: "#6b7280", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.875rem" }}
+              title="Export as PNG (cropped to content)"
+            >
+              Export PNG
+            </button>
+          </div>
+          <OpportunityWaterfall orgUnit={orgUnit} opportunities={[opportunity]} preselectedOpportunityId={opportunity.id} />
+        </div>
       )}
 
       {tab === "audit" && (
